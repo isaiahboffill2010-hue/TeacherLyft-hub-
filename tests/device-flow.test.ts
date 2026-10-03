@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -125,5 +125,58 @@ describe("local pairing boundary", () => {
       body: JSON.stringify({ code: "123456" }),
     }));
     expect(response.status).toBe(403);
+  });
+
+  it("logs a safe HTTP status diagnostic without logging the pairing code", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("forbidden", { status: 403 })));
+    const { POST } = await import("@/app/api/local/pair/route");
+    const response = await POST(new Request("http://localhost/api/local/pair", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code: "123456" }),
+    }));
+
+    expect(response.status).toBe(503);
+    const output = JSON.stringify(errorSpy.mock.calls);
+    expect(output).toContain('"kind":"http"');
+    expect(output).toContain('"status":403');
+    expect(output).not.toContain("123456");
+    expect(output).not.toContain(token);
+  });
+
+  it("distinguishes credential save failures without logging the credential", async () => {
+    const blockedParent = path.join(directory, "not-a-directory");
+    await writeFile(blockedParent, "file");
+    vi.stubEnv("TEACHERLYFT_CREDENTIAL_PATH", path.join(blockedParent, "device.json"));
+    vi.resetModules();
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(pairResponse()));
+    const { POST } = await import("@/app/api/local/pair/route");
+    const response = await POST(new Request("http://localhost/api/local/pair", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code: "123456" }),
+    }));
+
+    expect(response.status).toBe(503);
+    const output = JSON.stringify(errorSpy.mock.calls);
+    expect(output).toContain('"kind":"credential_save"');
+    expect(output).not.toContain("123456");
+    expect(output).not.toContain(token);
+  });
+
+  it("returns only safe backend probe fields", async () => {
+    vi.stubEnv("TEACHERLYFT_API_URL", "http://10.0.0.18:3000");
+    vi.resetModules();
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("ok", { status: 200 })));
+    const { GET } = await import("@/app/api/local/debug-backend/route");
+    const response = await GET(new Request("http://localhost/api/local/debug-backend"));
+    const body = await response.json();
+
+    expect(body).toEqual({
+      host: "10.0.0.18:3000",
+      protocol: "http",
+      fetchSucceeded: true,
+      status: 200,
+      latencyMs: expect.any(Number),
+    });
+    expect(JSON.stringify(body)).not.toContain(token);
   });
 });

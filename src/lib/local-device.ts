@@ -6,6 +6,24 @@ import { pairWithTeacherLyft, TeacherLyftApiError, verifyWithTeacherLyft } from 
 
 let pairingOperation: Promise<LocalDeviceState> | null = null;
 
+export class LocalDeviceError extends Error {
+  constructor(
+    readonly kind: "credential_save" | "pairing_verification",
+    message: string,
+    readonly causeCode?: string,
+    options?: ErrorOptions,
+  ) {
+    super(message, options);
+    this.name = "LocalDeviceError";
+  }
+}
+
+function filesystemCode(error: unknown): string | undefined {
+  return error && typeof error === "object" && "code" in error && typeof error.code === "string"
+    ? error.code
+    : undefined;
+}
+
 export async function getLocalDeviceState(): Promise<LocalDeviceState> {
   const credential = await loadDeviceCredential();
   if (!credential) return { state: "unpaired" };
@@ -23,13 +41,28 @@ export async function getLocalDeviceState(): Promise<LocalDeviceState> {
 
 async function performPairing(code: string): Promise<LocalDeviceState> {
   const credential = await pairWithTeacherLyft(code);
-  await saveDeviceCredential(credential);
+  try {
+    await saveDeviceCredential(credential);
+  } catch (error) {
+    throw new LocalDeviceError(
+      "credential_save",
+      "Unable to save the device credential",
+      filesystemCode(error),
+      { cause: error },
+    );
+  }
   try {
     const device = await verifyWithTeacherLyft(credential);
     return { state: "connected", deviceName: device.deviceName, teacherDisplayName: device.teacherDisplayName };
   } catch (error) {
     await deleteDeviceCredential();
-    throw error;
+    const causeCode = error instanceof TeacherLyftApiError ? error.details.causeCode : undefined;
+    throw new LocalDeviceError(
+      "pairing_verification",
+      "Pairing succeeded but device verification failed",
+      causeCode,
+      { cause: error },
+    );
   }
 }
 
