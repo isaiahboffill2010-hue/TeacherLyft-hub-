@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { LocalDeviceState } from "@/shared/device-types";
 import { appendDigit, canSubmitCode, formatPairingCode, removeLastDigit } from "@/shared/keypad";
 
-type Screen = "checking" | "unpaired" | "connected" | "offline" | "complete";
+type Screen = "checking" | "unpaired" | "connected" | "offline" | "complete" | "bridge-error";
 
 export function AssistantApp() {
   const [screen, setScreen] = useState<Screen>("checking");
@@ -12,6 +12,12 @@ export function AssistantApp() {
   const [notice, setNotice] = useState<string | null>(null);
   const [deviceName, setDeviceName] = useState("TeacherLyft Assistant");
   const [teacherName, setTeacherName] = useState<string | null>(null);
+
+  console.info("[renderer] AssistantApp render entered");
+
+  useEffect(() => {
+    console.info(`[renderer] current UI state: ${screen}`);
+  }, [screen]);
 
   const applyState = useCallback((state: LocalDeviceState) => {
     if (state.state === "connected") {
@@ -32,18 +38,34 @@ export function AssistantApp() {
   const checkDevice = useCallback(async () => {
     setBusy(true);
     setError(null);
-    try { applyState(await window.teacherlyft.retryConnection()); }
+    try {
+      if (!window.teacherlyft) throw new Error("Preload bridge unavailable");
+      applyState(await window.teacherlyft.retryConnection());
+    }
     catch {
       setError("Unable to check this device. Try again.");
-      setScreen("offline");
+      setScreen(window.teacherlyft ? "offline" : "bridge-error");
     } finally { setBusy(false); }
   }, [applyState]);
 
   useEffect(() => {
     let cancelled = false;
-    window.teacherlyft.getDeviceState()
-      .then((state) => { if (!cancelled) applyState(state); })
+    const bridge = window.teacherlyft;
+    console.info(`[renderer] window.teacherlyft ${bridge ? "exists" : "does not exist"}`);
+    if (!bridge) {
+      setError("The secure preload bridge did not start.");
+      setScreen("bridge-error");
+      return () => { cancelled = true; };
+    }
+
+    console.info("[renderer] getDeviceState called");
+    void bridge.getDeviceState()
+      .then((state) => {
+        console.info("[renderer] getDeviceState resolved");
+        if (!cancelled) applyState(state);
+      })
       .catch(() => {
+        console.error("[renderer] getDeviceState rejected");
         if (!cancelled) {
           setError("Unable to check this device. Try again.");
           setScreen("offline");
@@ -57,7 +79,9 @@ export function AssistantApp() {
     setBusy(true);
     setError(null);
     try {
-      const result = await window.teacherlyft.pair({ code });
+      const bridge = window.teacherlyft;
+      if (!bridge) throw new Error("Preload bridge unavailable");
+      const result = await bridge.pair({ code });
       setCode("");
       if (result.ok) applyState(result.state);
       else setError(result.message);
@@ -67,6 +91,7 @@ export function AssistantApp() {
   };
 
   if (screen === "checking") return <Shell><div className="status-card"><Spinner /><h1>Checking your Assistant</h1><p>Connecting securely to TeacherLyft…</p></div></Shell>;
+  if (screen === "bridge-error") return <Shell><div className="status-card" role="alert"><div className="status-icon muted">!</div><p className="eyebrow">TeacherLyft Assistant</p><h1>Unable to start securely.</h1><p>{error || "The secure connection to this device is unavailable."}</p><button className="primary wide" onClick={() => window.location.reload()}>Retry</button></div></Shell>;
   if (screen === "offline") return <Shell><div className="status-card"><div className="status-icon muted">!</div><p className="eyebrow">TeacherLyft Assistant</p><h1>You’re offline.</h1><p>Your device is still paired. Reconnect to the internet and try again.</p>{error && <p className="error" role="alert">{error}</p>}<button className="primary wide" onClick={() => void checkDevice()} disabled={busy}>{busy ? "Checking…" : "Retry"}</button></div></Shell>;
   if (screen === "connected") return <Shell><div className="status-card"><div className="status-icon success">✓</div><p className="eyebrow">TeacherLyft</p><h1>Connected</h1><p>TeacherLyft Assistant is linked to:</p><strong className="account-name">{teacherName || "Your TeacherLyft account"}</strong><dl><div><dt>Device</dt><dd>{deviceName}</dd></div></dl><button className="primary wide" onClick={() => setScreen("complete")}>Continue</button></div></Shell>;
   if (screen === "complete") return <Shell><div className="status-card"><div className="status-icon success">✓</div><p className="eyebrow">TeacherLyft</p><h1>Setup complete.</h1><p>Your Assistant is securely connected and ready for the next phase.</p><button className="secondary wide" onClick={() => setScreen("connected")}>Back</button></div></Shell>;

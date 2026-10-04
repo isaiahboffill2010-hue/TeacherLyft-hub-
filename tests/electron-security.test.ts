@@ -38,7 +38,7 @@ describe("Electron security boundary", () => {
     expect(packageJson.scripts.start).toBe("electron out/main/index.js");
   });
 
-  it("builds and resolves the exact preload artifact without a stale JavaScript path", async () => {
+  it("builds and resolves the sandbox-compatible CommonJS preload artifact", async () => {
     const command = process.platform === "win32"
       ? { executable: process.env.ComSpec ?? "cmd.exe", args: ["/d", "/s", "/c", "npm run build"] }
       : { executable: "npm", args: ["run", "build"] };
@@ -51,13 +51,14 @@ describe("Electron security boundary", () => {
     expect(build.stderr).not.toContain("error during build");
     expect(build.status, `${build.stdout}\n${build.stderr}`).toBe(0);
 
-    const expectedPreload = resolve(rootPath, "out/preload/index.mjs");
+    const expectedPreload = resolve(rootPath, "out/preload/index.cjs");
     expect(existsSync(expectedPreload)).toBe(true);
     expect(resolvePreloadPath(resolve(rootPath, "out/main"))).toBe(expectedPreload);
     expect(existsSync(resolve(rootPath, "out/preload/index.js"))).toBe(false);
+    expect(existsSync(resolve(rootPath, "out/preload/index.mjs"))).toBe(false);
 
     const preloadReferences = `${await text("src/main/index.ts")}\n${await text("out/main/index.js")}`;
-    expect(preloadReferences).not.toMatch(/preload[\\/]index\.js/);
+    expect(preloadReferences).not.toMatch(/preload[\\/]index\.(?:js|mjs)/);
   }, 120_000);
 
   it("contains no forced Ozone or GPU flags", async () => {

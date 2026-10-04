@@ -31,6 +31,14 @@ async function createWindow(): Promise<BrowserWindow> {
   Menu.setApplicationMenu(null);
   registerIpcHandlers(window.webContents.id);
 
+  window.webContents.on("console-message", (details) => {
+    const log = details.level === "error" ? console.error : console.info;
+    log(`[electron/renderer] ${details.message}`);
+  });
+  window.webContents.on("preload-error", (_event, preloadPath, error) => {
+    console.error("[electron/preload] Failed", { preloadPath, message: error.message });
+  });
+
   window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
   window.webContents.on("will-navigate", (event, url) => {
     const current = window.webContents.getURL();
