@@ -2,7 +2,7 @@
 
 Touchscreen-first Raspberry Pi application for securely pairing a physical TeacherLyft Assistant with an existing TeacherLyft Workspace teacher account.
 
-Phase 1B includes pairing, server-side credential persistence, startup verification, revocation handling, offline handling, and a connected placeholder. It does not connect directly to Google, store student data, or implement classroom/AI features.
+Phase 1 includes pairing, server-side credential persistence, startup verification, revocation handling, and offline handling. Phase 2 adds production boot, health checking, Chromium kiosk startup, and crash recovery. It does not connect directly to Google, store student data, or implement classroom/AI features.
 
 ## Architecture
 
@@ -99,7 +99,7 @@ npm run build
 npm run start
 ```
 
-## Raspberry Pi installation
+## Raspberry Pi development run
 
 ```bash
 git clone https://github.com/isaiahboffill2010-hue/TeacherLyft-hub-.git
@@ -114,57 +114,126 @@ npm run start
 
 Set `TEACHERLYFT_API_URL` to the deployed HTTPS TeacherLyft origin, or to the laptop LAN URL for temporary local testing.
 
-### Production service
+## One-time Raspberry Pi appliance installation
 
-The example service uses a dedicated account and `/opt/teacherlyft-assistant`:
-
-```bash
-sudo useradd --system --create-home --shell /usr/sbin/nologin teacherlyft
-sudo mkdir -p /opt/teacherlyft-assistant /var/lib/teacherlyft-assistant
-sudo chown -R teacherlyft:teacherlyft /opt/teacherlyft-assistant /var/lib/teacherlyft-assistant
-sudo chmod 700 /var/lib/teacherlyft-assistant
-sudo cp -a . /opt/teacherlyft-assistant/
-sudo chown -R teacherlyft:teacherlyft /opt/teacherlyft-assistant
-sudo cp deploy/teacherlyft-assistant.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now teacherlyft-assistant
-sudo systemctl status teacherlyft-assistant
-```
-
-The service binds only to `127.0.0.1:3000`, restarts after failures, and can write only to the credential state directory under its systemd filesystem restrictions.
-
-### Chromium kiosk mode
-
-Install Chromium and curl:
+Use Raspberry Pi OS 64-bit with the desktop enabled, Node.js 22, Git, curl, and Chromium. Clone the repository as the normal desktop user, create `.env.local`, then run the installer. Do not place credentials in the repository.
 
 ```bash
 sudo apt update
-sudo apt install chromium curl
-chmod +x scripts/start-kiosk.sh
+sudo apt install -y git curl chromium
+git clone https://github.com/isaiahboffill2010-hue/TeacherLyft-hub-.git
+cd TeacherLyft-hub-
+cp .env.example .env.local
+nano .env.local
+sudo TEACHERLYFT_DESKTOP_USER="$(id -un)" bash scripts/install-pi.sh
 ```
 
-Run `scripts/start-kiosk.sh` from the graphical Raspberry Pi session. It detects both common binary names (`chromium` and `chromium-browser`), waits up to 60 seconds for the local server, and launches `http://127.0.0.1:3000` with kiosk/session-recovery suppression flags.
+The installer refuses non-Linux/non-ARM64 systems, Node versions below 22, missing Chromium, missing curl, and an unknown desktop user. It creates the unprivileged `teacherlyft` service account, copies only the committed Git tree to `/opt/teacherlyft-assistant`, builds as that account, and stores the environment in root-only `/etc/teacherlyft-assistant.env`. On later runs it preserves that environment file and never removes `/var/lib/teacherlyft-assistant/device.json`.
 
-To autostart after desktop login, add this line to the Pi user's desktop autostart configuration:
+The systemd service:
+
+- starts at boot after `network-online.target`;
+- verifies that `.next/BUILD_ID` exists;
+- runs `next start` in production on `127.0.0.1:3000` only;
+- restarts after five seconds whenever the process exits;
+- runs as the unprivileged `teacherlyft` account;
+- gives the process write access only to `/var/lib/teacherlyft-assistant` and private temporary storage;
+- applies systemd filesystem, privilege, kernel, and SUID hardening;
+- sends output to the system journal without logging credentials.
+
+## Chromium kiosk and graphical autostart
+
+Raspberry Pi OS Bookworm and later use Wayland/labwc by default. The installer detects `labwc` and adds an idempotent launch line to:
 
 ```text
-@/opt/teacherlyft-assistant/scripts/start-kiosk.sh
+~/.config/labwc/autostart
 ```
 
-The exact autostart file varies by Raspberry Pi OS desktop release. Common locations are `~/.config/lxsession/LXDE-pi/autostart` and `~/.config/autostart/`; confirm the active desktop before editing it. The server systemd unit and graphical kiosk launcher are intentionally separate.
+If labwc is not installed, the installer uses the freedesktop-compatible `~/.config/autostart/teacherlyft-kiosk.desktop` fallback for an X11 desktop. Desktop auto-login must be enabled separately with `sudo raspi-config` under **System Options → Boot/Auto Login → Desktop Autologin**.
+
+The kiosk waits indefinitely for `http://127.0.0.1:3000/api/local/health`. It then runs this equivalent Chromium command:
+
+```bash
+chromium --kiosk --start-maximized --no-first-run --no-default-browser-check \
+  --noerrdialogs --disable-infobars --disable-session-crashed-bubble \
+  --disable-translate --disable-save-password-bubble \
+  --disable-features=Translate,PasswordManagerOnboarding,MediaRouter \
+  --overscroll-history-navigation=0 --ozone-platform-hint=auto \
+  --user-data-dir="$HOME/.config/teacherlyft-chromium" \
+  http://127.0.0.1:3000
+```
+
+Chromium's sandbox remains enabled. The launcher relaunches Chromium five seconds after any exit and returns to the health-wait loop if the server is unavailable. Kiosk output is appended to `~/.local/state/teacherlyft-assistant/kiosk.log`. Cursor hiding is intentionally not forced because common X11 cursor tools do not work reliably under Wayland and can interfere with touchscreen feedback.
+
+## Health and diagnostics
+
+The unauthenticated loopback health endpoint contains no device or account information:
+
+```bash
+curl --fail http://127.0.0.1:3000/api/local/health
+# {"ok":true}
+```
+
+Useful server commands:
+
+```bash
+systemctl status teacherlyft-assistant
+journalctl -u teacherlyft-assistant -f
+tail -f ~/.local/state/teacherlyft-assistant/kiosk.log
+```
+
+## Admin escape
+
+SSH is the preferred escape path and remains unaffected. From another computer:
+
+```bash
+ssh <desktop-user>@<pi-hostname>
+touch ~/.config/teacherlyft-assistant/disable-kiosk
+pkill -x chromium || pkill -x chromium-browser || true
+```
+
+The disable marker prevents the watchdog from reopening Chromium. To restore kiosk mode:
+
+```bash
+rm -f ~/.config/teacherlyft-assistant/disable-kiosk
+sudo reboot
+```
+
+With a physical keyboard, `Ctrl+Alt+F2` opens a text console where the same commands can be run. There is intentionally no teacher-visible exit control.
 
 ## Updating the Pi
 
-If the repository is cloned directly at `/opt/teacherlyft-assistant`:
+Pull in the original desktop-user checkout, review the update, and rerun the idempotent installer. The app deployment and credential state are separate, so the update never deletes `device.json`:
 
 ```bash
-cd /opt/teacherlyft-assistant
-sudo -u teacherlyft git pull --ff-only
-sudo -u teacherlyft npm install
-sudo -u teacherlyft npm test
-sudo -u teacherlyft npm run build
+cd ~/TeacherLyft-hub-
+git status --short
+git pull --ff-only origin main
+npm ci
+npm test
+npm run type-check
+npm run build
+sudo TEACHERLYFT_DESKTOP_USER="$(id -un)" bash scripts/install-pi.sh
+```
+
+If `.env.local` changes intentionally after the first installation, update the protected service environment explicitly, then restart:
+
+```bash
+sudo install -m 0600 -o root -g root .env.local /etc/teacherlyft-assistant.env
 sudo systemctl restart teacherlyft-assistant
 ```
+
+## Reboot acceptance test
+
+1. Confirm `/var/lib/teacherlyft-assistant/device.json` exists and record only its checksum: `sudo sha256sum /var/lib/teacherlyft-assistant/device.json`.
+2. Run `sudo reboot`.
+3. Do not touch the Pi. Confirm the desktop loads and Chromium opens the Assistant in kiosk mode without browser controls or restore prompts.
+4. Confirm the previously paired account is still connected.
+5. SSH into the Pi and run `systemctl is-active teacherlyft-assistant` and the health `curl` command above.
+6. Re-run the credential checksum and confirm it is unchanged.
+7. Test server recovery with `sudo systemctl kill -s SIGKILL teacherlyft-assistant`; after at least five seconds, confirm the service and health endpoint recover.
+8. Test kiosk recovery with `pkill -x chromium || pkill -x chromium-browser`; after at least five seconds, confirm Chromium reopens.
+9. Review the server journal and kiosk log for unexpected errors and confirm neither contains a pairing code, token, or authorization header.
 
 ## Manual end-to-end test
 

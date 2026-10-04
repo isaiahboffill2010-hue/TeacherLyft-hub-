@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=TeacherLyft Assistant Kiosk
+Comment=Launch the local TeacherLyft Assistant appliance UI
+Exec=/opt/teacherlyft-assistant/scripts/start-kiosk.sh
+Terminal=false
+X-GNOME-Autostart-enabled=true
