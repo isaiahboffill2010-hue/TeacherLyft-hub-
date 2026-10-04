@@ -1,8 +1,10 @@
+import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
+import { spawnSync } from "node:child_process";
 import { describe, expect, it, vi } from "vitest";
 import { createTeacherLyftBridge } from "@/preload/bridge";
 import { IPC_CHANNELS, isValidPairRequest } from "@/shared/ipc";
-import { browserWindowOptions } from "@/main/window-options";
+import { browserWindowOptions, shouldUseSandbox } from "@/main/window-options";
 
 const root = new URL("../", import.meta.url);
 const text = (relativePath: string) => readFile(new URL(relativePath, root), "utf8");
@@ -11,6 +13,44 @@ describe("Electron security boundary", () => {
   it("enables isolation and sandboxing while disabling renderer Node access", () => {
     const options = browserWindowOptions("/trusted/preload.js", true);
     expect(options.webPreferences).toMatchObject({ nodeIntegration: false, contextIsolation: true, sandbox: true, webviewTag: false });
+  });
+
+  it("limits sandbox compatibility mode to Linux ARM64", () => {
+    expect(shouldUseSandbox({ platform: "win32", arch: "arm64", compatibilityRequested: true })).toBe(true);
+    expect(shouldUseSandbox({ platform: "linux", arch: "x64", compatibilityRequested: true })).toBe(true);
+    expect(shouldUseSandbox({ platform: "linux", arch: "arm64", compatibilityRequested: false })).toBe(true);
+    expect(shouldUseSandbox({ platform: "linux", arch: "arm64", compatibilityRequested: true })).toBe(false);
+  });
+
+  it("pins Electron and launches the explicit built main entry", async () => {
+    const packageJson = JSON.parse(await text("package.json")) as {
+      scripts: { start: string };
+      devDependencies: { electron: string };
+    };
+    expect(packageJson.devDependencies.electron).toBe("43.2.0");
+    expect(packageJson.scripts.start).toBe("electron out/main/index.js");
+  });
+
+  it("contains no forced Ozone or GPU flags", async () => {
+    const runtime = [
+      await text("src/main/index.ts"),
+      await text("src/main/window-options.ts"),
+      await text("scripts/start-pi-x11.sh"),
+      await text("scripts/start-pi-x11-client.sh"),
+    ].join("\n");
+    expect(runtime).not.toMatch(/--(?:ozone-platform(?:-hint)?|disable-gpu(?:-compositing)?|use-gl|use-angle)/);
+  });
+
+  it("has valid Bash syntax for both Pi X11 scripts", () => {
+    const windowsBash = "C:/Program Files/Git/bin/bash.exe";
+    const bash = process.platform === "win32" && existsSync(windowsBash) ? windowsBash : "bash";
+    const result = spawnSync(bash, ["-n", "scripts/start-pi-x11.sh", "scripts/start-pi-x11-client.sh"], {
+      cwd: new URL("../", import.meta.url),
+      encoding: "utf8",
+    });
+    expect(result.error?.message).toBeUndefined();
+    expect(result.stderr).toBe("");
+    expect(result.status).toBe(0);
   });
 
   it("exposes only the four approved bridge methods", () => {

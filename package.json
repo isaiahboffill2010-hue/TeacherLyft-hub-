@@ -10,7 +10,7 @@
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",
-    "start": "electron .",
+    "start": "electron out/main/index.js",
     "type-check": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -27,7 +27,7 @@
     "@types/react-dom": "19.3.0",
     "eslint": "9.39.5",
     "@eslint/js": "9.39.5",
-    "electron": "44.5.1",
+    "electron": "43.2.0",
     "electron-vite": "5.0.0",
     "globals": "16.4.0",
     "typescript": "6.0.3",
@@ -36,7 +36,7 @@
     "vitest": "4.1.11"
   },
   "allowScripts": {
-    "electron@44.5.1": true,
+    "electron@43.2.0": true,
     "esbuild@0.25.12": true,
     "esbuild@0.28.2": true
   }

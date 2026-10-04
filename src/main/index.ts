@@ -2,16 +2,32 @@ import { join } from "node:path";
 import { loadEnvFile } from "node:process";
 import { app, BrowserWindow, Menu, session } from "electron";
 import { registerIpcHandlers, removeIpcHandlers } from "@/main/ipc-handlers";
-import { browserWindowOptions } from "@/main/window-options";
+import { browserWindowOptions, shouldUseSandbox } from "@/main/window-options";
 
 try { loadEnvFile(join(process.cwd(), ".env.local")); }
 catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
 
-app.enableSandbox();
 const development = Boolean(process.env.ELECTRON_RENDERER_URL);
+const sandboxEnabled = shouldUseSandbox();
+if (sandboxEnabled) app.enableSandbox();
+
+console.info("[electron/startup] Runtime", {
+  electron: process.versions.electron,
+  platform: process.platform,
+  arch: process.arch,
+  sessionType: process.env.XDG_SESSION_TYPE ?? "unknown",
+  display: process.env.DISPLAY ?? null,
+  waylandDisplay: process.env.WAYLAND_DISPLAY ?? null,
+  sandbox: sandboxEnabled,
+});
 
 async function createWindow(): Promise<BrowserWindow> {
-  const window = new BrowserWindow(browserWindowOptions(join(__dirname, "../preload/index.js"), !development));
+  const window = new BrowserWindow(browserWindowOptions(
+    join(__dirname, "../preload/index.js"),
+    !development,
+    sandboxEnabled,
+  ));
+  console.info("[electron/startup] BrowserWindow created");
   Menu.setApplicationMenu(null);
   registerIpcHandlers(window.webContents.id);
 
@@ -28,11 +44,14 @@ async function createWindow(): Promise<BrowserWindow> {
     if (development && input.type === "keyDown" && input.key === "F12") window.webContents.toggleDevTools();
   });
   window.once("ready-to-show", () => window.show());
+  window.webContents.once("did-finish-load", () => console.info("[electron/startup] Renderer did-finish-load"));
   window.on("closed", removeIpcHandlers);
 
   if (development && process.env.ELECTRON_RENDERER_URL) {
+    console.info("[electron/startup] Renderer load start", { mode: "development" });
     await window.loadURL(process.env.ELECTRON_RENDERER_URL);
   } else {
+    console.info("[electron/startup] Renderer load start", { mode: "bundled" });
     await window.loadFile(join(__dirname, "../renderer/index.html"));
   }
   return window;

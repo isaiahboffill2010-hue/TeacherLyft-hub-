@@ -1,6 +1,26 @@
 import type { BrowserWindowConstructorOptions } from "electron";
 
-export function browserWindowOptions(preload: string, production: boolean): BrowserWindowConstructorOptions {
+type SandboxEnvironment = {
+  platform: NodeJS.Platform;
+  arch: string;
+  compatibilityRequested: boolean;
+};
+
+export function shouldUseSandbox(environment: SandboxEnvironment = {
+  platform: process.platform,
+  arch: process.arch,
+  compatibilityRequested: process.env.TEACHERLYFT_PI_COMPATIBILITY === "1",
+}): boolean {
+  return !(environment.platform === "linux"
+    && environment.arch === "arm64"
+    && environment.compatibilityRequested);
+}
+
+export function browserWindowOptions(
+  preload: string,
+  production: boolean,
+  sandbox = shouldUseSandbox(),
+): BrowserWindowConstructorOptions {
   const fullscreen = production && process.env.TEACHERLYFT_FULLSCREEN !== "false";
   return {
     width: 1100,
@@ -16,7 +36,7 @@ export function browserWindowOptions(preload: string, production: boolean): Brow
       preload,
       nodeIntegration: false,
       contextIsolation: true,
-      sandbox: true,
+      sandbox,
       webviewTag: false,
     },
   };

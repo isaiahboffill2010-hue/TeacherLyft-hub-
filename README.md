@@ -22,7 +22,8 @@ The renderer receives only safe device state and safe error messages. The device
 - Node.js 22.12 or newer
 - npm
 - Raspberry Pi OS 64-bit ARM64 or Windows for development
-- A graphical desktop session for Electron
+- Electron exactly `43.2.0`
+- A graphical desktop session for the normal launch, or `startx` for the compatibility test
 
 There are no native application dependencies beyond Electron itself. npm downloads the Electron binary matching the host architecture.
 
@@ -56,7 +57,7 @@ npm run build
 npm run start
 ```
 
-`npm run dev` starts the Vite renderer and Electron together with live reload. `npm run build` produces main, preload, and renderer outputs under `out/`. `npm run start` opens the built Electron application; it does not start a localhost server.
+`npm run dev` starts the Vite renderer and Electron together with live reload. `npm run build` produces main, preload, and renderer outputs under `out/`. `npm run start` explicitly launches `electron out/main/index.js`; it does not resolve the project directory or start a localhost server.
 
 ## Electron security
 
@@ -64,10 +65,14 @@ The `BrowserWindow` explicitly sets:
 
 - `nodeIntegration: false`
 - `contextIsolation: true`
-- `sandbox: true`
+- `sandbox: true` by default
 - `webviewTag: false`
 
-The app also enables the sandbox globally, denies all permission requests, blocks new windows, blocks cross-origin navigation, removes the application menu, and loads only the bundled renderer in production.
+The app also enables the sandbox globally by default, denies all permission requests, blocks new windows, blocks cross-origin navigation, removes the application menu, and loads only the bundled renderer in production.
+
+For the isolated Raspberry Pi X11 compatibility test only, `TEACHERLYFT_PI_COMPATIBILITY=1` changes the renderer setting to `sandbox: false`. The switch is ignored unless both `process.platform === "linux"` and `process.arch === "arm64"`; it cannot disable sandboxing on Windows, x64 Linux, or ordinary Pi launches. `nodeIntegration: false`, context isolation, the preload bridge, fixed IPC channels, sender validation, permission denial, and navigation restrictions remain enabled. Disabling the renderer sandbox reduces defense in depth and is used only to reproduce the known-working RitePath conditions.
+
+No Ozone, Wayland, X11, GPU-disable, GL, or ANGLE command-line flags are injected. Electron and Chromium retain their defaults.
 
 The frozen preload bridge exposes only:
 
@@ -124,7 +129,48 @@ fi
 npm run start
 ```
 
+This is the normal desktop-session comparison path. Confirm the runtime first:
+
+```bash
+npx electron --version
+# v43.2.0
+echo "$XDG_SESSION_TYPE $DISPLAY $WAYLAND_DISPLAY"
+npm run start
+```
+
 If the existing checkout is `/opt/teacherlyft-assistant`, use that path instead. Run the command as the graphical desktop user, not over a headless SSH-only session.
+
+### Isolated X11/startx compatibility test
+
+Install the X11 launcher once if `startx` is unavailable:
+
+```bash
+sudo apt update
+sudo apt install xserver-xorg xinit
+```
+
+Switch to a text TTY with `Ctrl+Alt+F3`, log in as the normal Pi desktop user, and temporarily stop the current display manager so display `:0` is free:
+
+```bash
+sudo systemctl stop display-manager
+cd ~/TeacherLyft-hub-
+npm run build
+bash scripts/start-pi-x11.sh
+```
+
+The launcher starts an X server on `DISPLAY=:0` with TCP listening disabled, marks the session as X11, removes `WAYLAND_DISPLAY`, enables the Linux ARM64-only sandbox compatibility mode, and executes the explicit production start command. Exiting Electron ends the temporary X session. Restore the normal desktop afterward:
+
+```bash
+sudo systemctl start display-manager
+```
+
+To test isolated X11 while retaining the renderer sandbox:
+
+```bash
+TEACHERLYFT_PI_COMPATIBILITY=0 bash scripts/start-pi-x11.sh
+```
+
+Startup diagnostics print only Electron version, platform, architecture, session type, display identifiers, sandbox mode, window creation, renderer load start, and renderer completion. They never include pairing codes, tokens, account data, or authorization headers.
 
 ## Real-Pi acceptance test
 
