@@ -1,10 +1,8 @@
-import "server-only";
-
 import { constants } from "node:fs";
 import { access, chmod, lstat, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import type { DeviceCredential } from "@/lib/device-types";
+import type { DeviceCredential } from "@/shared/device-types";
 
 const TOKEN_PATTERN = /^tla_[0-9a-f]{32}_[A-Za-z0-9_-]{43}$/;
 
@@ -43,11 +41,10 @@ export async function loadDeviceCredential(): Promise<DeviceCredential | null> {
   try {
     await access(target, constants.R_OK);
     await rejectSymlink(target);
-    const parsed: unknown = JSON.parse(await readFile(/* turbopackIgnore: true */ target, "utf8"));
+    const parsed: unknown = JSON.parse(await readFile(target, "utf8"));
     return isDeviceCredential(parsed) ? parsed : null;
   } catch (error) {
-    const code = (error as NodeJS.ErrnoException).code;
-    if (code === "ENOENT") return null;
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
     throw error;
   }
 }
@@ -59,7 +56,6 @@ export async function saveDeviceCredential(credential: DeviceCredential): Promis
   await mkdir(directory, { recursive: true, mode: 0o700 });
   if (process.platform !== "win32") await chmod(directory, 0o700);
   await rejectSymlink(target);
-
   const temporary = path.join(directory, `.device-${randomUUID()}.tmp`);
   try {
     await writeFile(temporary, `${JSON.stringify(credential)}\n`, { encoding: "utf8", mode: 0o600, flag: "wx" });

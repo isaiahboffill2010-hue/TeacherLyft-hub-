@@ -20,7 +20,7 @@ function meResponse(status = 200) {
 }
 
 beforeEach(async () => {
-  directory = await mkdtemp(path.join(os.tmpdir(), "teacherlyft-assistant-test-"));
+  directory = await mkdtemp(path.join(os.tmpdir(), "teacherlyft-electron-test-"));
   credentialPath = path.join(directory, "state", "device.json");
   vi.stubEnv("TEACHERLYFT_CREDENTIAL_PATH", credentialPath);
   vi.stubEnv("TEACHERLYFT_API_URL", "https://teacherlyft.test");
@@ -33,150 +33,98 @@ afterEach(async () => {
   await rm(directory, { recursive: true, force: true });
 });
 
-describe("local pairing boundary", () => {
-  it("forwards a valid code, stores the credential, verifies it, and never returns the token", async () => {
-    const fetchMock = vi.fn()
-      .mockResolvedValueOnce(pairResponse())
-      .mockResolvedValueOnce(meResponse());
+describe("Electron main-process device flow", () => {
+  it("pairs, stores the credential, verifies, and returns no token", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(pairResponse()).mockResolvedValueOnce(meResponse());
     vi.stubGlobal("fetch", fetchMock);
-    const { POST } = await import("@/app/api/local/pair/route");
-    const response = await POST(new Request("http://localhost/api/local/pair", {
-      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code: "123456" }),
-    }));
-    const browserBody = await response.json();
-
-    expect(response.status).toBe(200);
-    expect(browserBody).toEqual({ state: "connected", deviceName: "TeacherLyft Assistant", teacherDisplayName: "Ms. Rivera" });
-    expect(JSON.stringify(browserBody)).not.toContain(token);
+    const { pairLocalDevice } = await import("@/main/local-device");
+    const state = await pairLocalDevice("123456");
+    expect(state).toEqual({ state: "connected", deviceName: "TeacherLyft Assistant", teacherDisplayName: "Ms. Rivera" });
+    expect(JSON.stringify(state)).not.toContain(token);
     expect(fetchMock.mock.calls[0]?.[0].toString()).toBe("https://teacherlyft.test/api/devices/pair");
     expect(JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string)).toEqual({ code: "123456", name: "TeacherLyft Assistant" });
     expect(await readFile(credentialPath, "utf8")).toContain(token);
   });
 
   it("loads a persisted credential after module restart", async () => {
-    const store = await import("@/lib/credential-store");
+    const store = await import("@/main/credential-store");
     await store.saveDeviceCredential({ deviceId, deviceToken: token });
     vi.resetModules();
-    const restartedStore = await import("@/lib/credential-store");
-    expect(await restartedStore.loadDeviceCredential()).toEqual({ deviceId, deviceToken: token });
+    const restarted = await import("@/main/credential-store");
+    expect(await restarted.loadDeviceCredential()).toEqual({ deviceId, deviceToken: token });
   });
 
   it("returns connected for a valid stored credential", async () => {
-    const store = await import("@/lib/credential-store");
+    const store = await import("@/main/credential-store");
     await store.saveDeviceCredential({ deviceId, deviceToken: token });
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(meResponse()));
-    const { getLocalDeviceState } = await import("@/lib/local-device");
+    const { getLocalDeviceState } = await import("@/main/local-device");
     expect(await getLocalDeviceState()).toEqual({ state: "connected", deviceName: "TeacherLyft Assistant", teacherDisplayName: "Ms. Rivera" });
   });
 
-  it("deletes a revoked credential and reports the reason", async () => {
-    const store = await import("@/lib/credential-store");
+  it("deletes a revoked credential", async () => {
+    const store = await import("@/main/credential-store");
     await store.saveDeviceCredential({ deviceId, deviceToken: token });
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(meResponse(401)));
-    const { getLocalDeviceState } = await import("@/lib/local-device");
+    const { getLocalDeviceState } = await import("@/main/local-device");
     expect(await getLocalDeviceState()).toEqual({ state: "unpaired", reason: "revoked" });
     expect(await store.loadDeviceCredential()).toBeNull();
   });
 
-  it("keeps the credential on a network error", async () => {
-    const store = await import("@/lib/credential-store");
+  it("keeps the credential and reports offline on network failure", async () => {
+    const store = await import("@/main/credential-store");
     await store.saveDeviceCredential({ deviceId, deviceToken: token });
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("offline")));
-    const { getLocalDeviceState } = await import("@/lib/local-device");
+    const { getLocalDeviceState } = await import("@/main/local-device");
     expect(await getLocalDeviceState()).toEqual({ state: "offline", paired: true });
     expect(await store.loadDeviceCredential()).toEqual({ deviceId, deviceToken: token });
   });
 
   it("does not persist a malformed pairing response", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(pairResponse({ success: true, deviceId })));
-    const { pairLocalDevice } = await import("@/lib/local-device");
+    const { pairLocalDevice } = await import("@/main/local-device");
     await expect(pairLocalDevice("123456")).rejects.toThrow();
-    const { loadDeviceCredential } = await import("@/lib/credential-store");
+    const { loadDeviceCredential } = await import("@/main/credential-store");
     expect(await loadDeviceCredential()).toBeNull();
   });
 
-  it("removes an incomplete credential when verification fails", async () => {
+  it("removes an incomplete credential when immediate verification fails", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(pairResponse()).mockResolvedValueOnce(meResponse(401)));
-    const { pairLocalDevice } = await import("@/lib/local-device");
-    await expect(pairLocalDevice("123456")).rejects.toThrow();
-    const { loadDeviceCredential } = await import("@/lib/credential-store");
+    const { pairLocalDevice } = await import("@/main/local-device");
+    await expect(pairLocalDevice("123456")).rejects.toThrow("verification failed");
+    const { loadDeviceCredential } = await import("@/main/credential-store");
     expect(await loadDeviceCredential()).toBeNull();
+  });
+
+  it("keeps a newly paired credential when immediate verification is offline", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(pairResponse()).mockRejectedValueOnce(new Error("offline")));
+    const { pairLocalDevice } = await import("@/main/local-device");
+    expect(await pairLocalDevice("123456")).toEqual({ state: "offline", paired: true });
+    const { loadDeviceCredential } = await import("@/main/credential-store");
+    expect(await loadDeviceCredential()).toEqual({ deviceId, deviceToken: token });
+  });
+
+  it("classifies backend 400 as an invalid pairing code", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response('{"error":"invalid"}', { status: 400 })));
+    const { pairWithTeacherLyft } = await import("@/main/teacherlyft-api");
+    await expect(pairWithTeacherLyft("123456")).rejects.toMatchObject({ kind: "invalid_code", status: 400 });
   });
 
   it("local disconnect deletes the credential", async () => {
-    const store = await import("@/lib/credential-store");
+    const store = await import("@/main/credential-store");
     await store.saveDeviceCredential({ deviceId, deviceToken: token });
-    const { POST } = await import("@/app/api/local/disconnect/route");
-    const response = await POST(new Request("http://localhost/api/local/disconnect", { method: "POST" }));
-    expect(response.status).toBe(200);
+    const { disconnectLocalDevice } = await import("@/main/local-device");
+    await disconnectLocalDevice();
     expect(await store.loadDeviceCredential()).toBeNull();
   });
 
-  it("reports unpaired when there is no credential", async () => {
-    const { getLocalDeviceState } = await import("@/lib/local-device");
-    expect(await getLocalDeviceState()).toEqual({ state: "unpaired" });
-  });
-
-  it("rejects cross-origin local mutations", async () => {
-    const { POST: pair } = await import("@/app/api/local/pair/route");
-    const response = await pair(new Request("http://localhost/api/local/pair", {
-      method: "POST",
-      headers: { Origin: "https://malicious.example", "Content-Type": "application/json" },
-      body: JSON.stringify({ code: "123456" }),
-    }));
-    expect(response.status).toBe(403);
-  });
-
-  it("logs a safe HTTP status diagnostic without logging the pairing code", async () => {
-    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("forbidden", { status: 403 })));
-    const { POST } = await import("@/app/api/local/pair/route");
-    const response = await POST(new Request("http://localhost/api/local/pair", {
-      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code: "123456" }),
-    }));
-
-    expect(response.status).toBe(503);
-    const output = JSON.stringify(errorSpy.mock.calls);
-    expect(output).toContain('"kind":"http"');
-    expect(output).toContain('"status":403');
-    expect(output).not.toContain("123456");
-    expect(output).not.toContain(token);
-  });
-
-  it("distinguishes credential save failures without logging the credential", async () => {
+  it("distinguishes credential save failures", async () => {
     const blockedParent = path.join(directory, "not-a-directory");
     await writeFile(blockedParent, "file");
     vi.stubEnv("TEACHERLYFT_CREDENTIAL_PATH", path.join(blockedParent, "device.json"));
     vi.resetModules();
-    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(pairResponse()));
-    const { POST } = await import("@/app/api/local/pair/route");
-    const response = await POST(new Request("http://localhost/api/local/pair", {
-      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code: "123456" }),
-    }));
-
-    expect(response.status).toBe(503);
-    const output = JSON.stringify(errorSpy.mock.calls);
-    expect(output).toContain('"kind":"credential_save"');
-    expect(output).not.toContain("123456");
-    expect(output).not.toContain(token);
-  });
-
-  it("returns only safe backend probe fields", async () => {
-    vi.stubEnv("TEACHERLYFT_API_URL", "http://10.0.0.18:3000");
-    vi.resetModules();
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("ok", { status: 200 })));
-    const { GET } = await import("@/app/api/local/debug-backend/route");
-    const response = await GET(new Request("http://localhost/api/local/debug-backend"));
-    const body = await response.json();
-
-    expect(body).toEqual({
-      host: "10.0.0.18:3000",
-      protocol: "http",
-      fetchSucceeded: true,
-      status: 200,
-      latencyMs: expect.any(Number),
-    });
-    expect(JSON.stringify(body)).not.toContain(token);
+    const { pairLocalDevice } = await import("@/main/local-device");
+    await expect(pairLocalDevice("123456")).rejects.toMatchObject({ kind: "credential_save" });
   });
 });

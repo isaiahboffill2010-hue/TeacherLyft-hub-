@@ -1,17 +1,8 @@
-"use client";
-
 import { useCallback, useEffect, useState } from "react";
-import type { LocalDeviceState } from "@/lib/device-types";
-import { appendDigit, canSubmitCode, formatPairingCode, removeLastDigit } from "@/lib/keypad";
+import type { LocalDeviceState } from "@/shared/device-types";
+import { appendDigit, canSubmitCode, formatPairingCode, removeLastDigit } from "@/shared/keypad";
 
 type Screen = "checking" | "unpaired" | "connected" | "offline" | "complete";
-
-async function parseError(response: Response, fallback: string): Promise<string> {
-  try {
-    const body = await response.json() as { error?: string };
-    return body.error || fallback;
-  } catch { return fallback; }
-}
 
 export function AssistantApp() {
   const [screen, setScreen] = useState<Screen>("checking");
@@ -41,11 +32,8 @@ export function AssistantApp() {
   const checkDevice = useCallback(async () => {
     setBusy(true);
     setError(null);
-    try {
-      const response = await fetch("/api/local/device", { cache: "no-store" });
-      if (!response.ok) throw new Error("Unable to check this device.");
-      applyState(await response.json() as LocalDeviceState);
-    } catch {
+    try { applyState(await window.teacherlyft.retryConnection()); }
+    catch {
       setError("Unable to check this device. Try again.");
       setScreen("offline");
     } finally { setBusy(false); }
@@ -53,11 +41,7 @@ export function AssistantApp() {
 
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/local/device", { cache: "no-store" })
-      .then(async (response) => {
-        if (!response.ok) throw new Error("Unable to check this device.");
-        return response.json() as Promise<LocalDeviceState>;
-      })
+    window.teacherlyft.getDeviceState()
       .then((state) => { if (!cancelled) applyState(state); })
       .catch(() => {
         if (!cancelled) {
@@ -73,16 +57,12 @@ export function AssistantApp() {
     setBusy(true);
     setError(null);
     try {
-      const response = await fetch("/api/local/pair", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code }),
-      });
+      const result = await window.teacherlyft.pair({ code });
       setCode("");
-      if (!response.ok) throw new Error(await parseError(response, "Unable to pair this device."));
-      applyState(await response.json() as LocalDeviceState);
-    } catch (pairError) {
-      setError(pairError instanceof Error ? pairError.message : "Unable to pair this device.");
+      if (result.ok) applyState(result.state);
+      else setError(result.message);
+    } catch {
+      setError("Unable to pair this device.");
     } finally { setBusy(false); }
   };
 

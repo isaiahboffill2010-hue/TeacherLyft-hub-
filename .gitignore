@@ -1,6 +1,8 @@
 node_modules/
 .next/
 out/
+dist/
+out/
 .env*
 !.env.example
 .teacherlyft-state/

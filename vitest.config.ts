@@ -9,7 +9,6 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": new URL("./src", import.meta.url).pathname,
-      "server-only": new URL("./tests/server-only.ts", import.meta.url).pathname,
     },
   },
 });

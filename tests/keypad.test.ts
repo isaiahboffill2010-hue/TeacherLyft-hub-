@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { appendDigit, canSubmitCode, formatPairingCode, removeLastDigit } from "@/lib/keypad";
+import { appendDigit, canSubmitCode, formatPairingCode, removeLastDigit } from "@/shared/keypad";
 
 describe("touchscreen keypad", () => {
   it("accepts digits only and stops at six", () => {
