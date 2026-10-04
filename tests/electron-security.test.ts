@@ -1,12 +1,19 @@
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
 import { createTeacherLyftBridge } from "@/preload/bridge";
 import { IPC_CHANNELS, isValidPairRequest } from "@/shared/ipc";
-import { browserWindowOptions, shouldUseSandbox } from "@/main/window-options";
+import {
+  browserWindowOptions,
+  resolvePreloadPath,
+  shouldUseSandbox,
+} from "@/main/window-options";
 
 const root = new URL("../", import.meta.url);
+const rootPath = dirname(fileURLToPath(new URL("package.json", root)));
 const text = (relativePath: string) => readFile(new URL(relativePath, root), "utf8");
 
 describe("Electron security boundary", () => {
@@ -30,6 +37,28 @@ describe("Electron security boundary", () => {
     expect(packageJson.devDependencies.electron).toBe("43.2.0");
     expect(packageJson.scripts.start).toBe("electron out/main/index.js");
   });
+
+  it("builds and resolves the exact preload artifact without a stale JavaScript path", async () => {
+    const command = process.platform === "win32"
+      ? { executable: process.env.ComSpec ?? "cmd.exe", args: ["/d", "/s", "/c", "npm run build"] }
+      : { executable: "npm", args: ["run", "build"] };
+    const build = spawnSync(command.executable, command.args, {
+      cwd: rootPath,
+      encoding: "utf8",
+      timeout: 120_000,
+    });
+    expect(build.error?.message).toBeUndefined();
+    expect(build.stderr).not.toContain("error during build");
+    expect(build.status, `${build.stdout}\n${build.stderr}`).toBe(0);
+
+    const expectedPreload = resolve(rootPath, "out/preload/index.mjs");
+    expect(existsSync(expectedPreload)).toBe(true);
+    expect(resolvePreloadPath(resolve(rootPath, "out/main"))).toBe(expectedPreload);
+    expect(existsSync(resolve(rootPath, "out/preload/index.js"))).toBe(false);
+
+    const preloadReferences = `${await text("src/main/index.ts")}\n${await text("out/main/index.js")}`;
+    expect(preloadReferences).not.toMatch(/preload[\\/]index\.js/);
+  }, 120_000);
 
   it("contains no forced Ozone or GPU flags", async () => {
     const runtime = [

@@ -1,4 +1,11 @@
 import type { BrowserWindowConstructorOptions } from "electron";
+import { resolve } from "node:path";
+
+export const PRELOAD_ENTRY_FILENAME = "index.mjs";
+
+export function resolvePreloadPath(mainProcessDirectory: string): string {
+  return resolve(mainProcessDirectory, "../preload", PRELOAD_ENTRY_FILENAME);
+}
 
 type SandboxEnvironment = {
   platform: NodeJS.Platform;

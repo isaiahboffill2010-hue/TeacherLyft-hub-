@@ -2,7 +2,7 @@ import { join } from "node:path";
 import { loadEnvFile } from "node:process";
 import { app, BrowserWindow, Menu, session } from "electron";
 import { registerIpcHandlers, removeIpcHandlers } from "@/main/ipc-handlers";
-import { browserWindowOptions, shouldUseSandbox } from "@/main/window-options";
+import { browserWindowOptions, resolvePreloadPath, shouldUseSandbox } from "@/main/window-options";
 
 try { loadEnvFile(join(process.cwd(), ".env.local")); }
 catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
@@ -23,7 +23,7 @@ console.info("[electron/startup] Runtime", {
 
 async function createWindow(): Promise<BrowserWindow> {
   const window = new BrowserWindow(browserWindowOptions(
-    join(__dirname, "../preload/index.js"),
+    resolvePreloadPath(__dirname),
     !development,
     sandboxEnabled,
   ));
