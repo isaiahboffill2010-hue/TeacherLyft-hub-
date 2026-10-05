@@ -25,6 +25,8 @@ export function HubDashboard({ connection, teacherName, retrying, onRetry }: Pro
   const [loadingDashboard, setLoadingDashboard] = useState(false);
   const [dashboardError, setDashboardError] = useState(false);
   const copy = activeTab === "home" ? null : placeholderCopy[activeTab];
+  const dashboardLoading = connection === "connected"
+    && (loadingDashboard || (dashboard === null && !dashboardError));
 
   const refreshDashboard = useCallback(async () => {
     const bridge = window.teacherlyft;
@@ -54,7 +56,7 @@ export function HubDashboard({ connection, teacherName, retrying, onRetry }: Pro
         <div className="placeholder-icon"><HubIcon name={activeTab}/></div>
         <p className="section-kicker">TeacherLyft Hub</p><h1>{copy.title}</h1><p>{copy.message}</p>
         <button className="primary home-button" onClick={() => setActiveTab("home")}><HubIcon name="home"/>Back to Home</button>
-      </section> : <HomeDashboard dashboard={dashboard} loading={loadingDashboard && dashboard === null}
+      </section> : <HomeDashboard dashboard={dashboard} loading={dashboardLoading}
           teacherName={dashboard?.teacherName || teacherName || "Teacher"}
           unavailable={dashboard === null && (connection === "offline" || dashboardError)}
           dashboardError={dashboardError && connection === "connected"}

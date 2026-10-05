@@ -2,11 +2,11 @@ import { useState } from "react";
 import type { DashboardAttentionKind, DashboardResponse } from "@/shared/dashboard-types";
 import { HubIcon, type IconName } from "@/renderer/components/HubIcon";
 
-const statDefinitions: Array<{ key: "classes" | "toGrade" | "students" | "reminders"; label: string; subtitle: string; icon: IconName; tone: string }> = [
-  { key: "classes", label: "Classes", subtitle: "Active classes this term", icon: "classes", tone: "blue" },
-  { key: "toGrade", label: "To Grade", subtitle: "Assignments waiting", icon: "clipboard", tone: "violet" },
-  { key: "students", label: "Students", subtitle: "Total students", icon: "students", tone: "green" },
-  { key: "reminders", label: "Reminders", subtitle: "Upcoming items", icon: "bell", tone: "orange" },
+const statDefinitions: Array<{ key: "classes" | "toGrade" | "students" | "reminders"; label: string; icon: IconName; tone: string }> = [
+  { key: "classes", label: "Classes", icon: "classes", tone: "blue" },
+  { key: "toGrade", label: "To Grade", icon: "clipboard", tone: "violet" },
+  { key: "students", label: "Students", icon: "students", tone: "green" },
+  { key: "reminders", label: "Reminders", icon: "bell", tone: "orange" },
 ];
 
 const attentionStyle: Record<DashboardAttentionKind, { tone: string; icon: IconName }> = {
@@ -57,14 +57,14 @@ export function HomeDashboard({ dashboard, loading, teacherName, unavailable, da
         <div className={`icon-tile ${stat.tone}`}><HubIcon name={stat.icon}/></div>
         <div><span>{stat.label}</span>
           {loading ? <span className="stat-skeleton" aria-label={`${stat.label} loading`} /> : <strong>{dashboard ? dashboard[stat.key] : "—"}</strong>}
-          <p>{stat.subtitle}</p>
+          <p>{loading ? "Loading..." : dashboard ? "Current value" : "Unavailable"}</p>
         </div>
       </article>)}
     </section>
 
     <section className="attention-section" aria-busy={loading}>
       <div className="section-heading"><div><p className="section-kicker">Stay ahead</p><h2>Needs Attention</h2></div>
-        <span>{loading ? "Loading…" : dashboard ? `${dashboard.needsAttention.length} items` : "Unavailable"}</span></div>
+        <span>{loading ? "Loading..." : dashboard ? `${dashboard.needsAttention.length} items` : "Unavailable"}</span></div>
       <div className="attention-list">
         {loading && [0, 1, 2].map((key) => <div className="attention-skeleton" key={key} aria-label="Needs attention loading" />)}
         {!loading && dashboard?.needsAttention.map((item) => {
