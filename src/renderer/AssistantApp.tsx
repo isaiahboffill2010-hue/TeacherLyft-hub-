@@ -4,6 +4,7 @@ import { appendDigit, canSubmitCode, formatPairingCode, removeLastDigit } from "
 import { HubDashboard } from "@/renderer/components/HubDashboard";
 
 type Screen = "checking" | "unpaired" | "connected" | "offline" | "bridge-error";
+const DEVICE_REVALIDATION_INTERVAL_MS = 60_000;
 
 export function AssistantApp() {
   const [screen, setScreen] = useState<Screen>("checking");
@@ -27,6 +28,7 @@ export function AssistantApp() {
     } else if (state.state === "offline") {
       setScreen("offline");
     } else {
+      setTeacherName(null);
       setNotice(state.reason === "revoked"
         ? "This TeacherLyft Assistant has been disconnected from the account."
         : null);
@@ -72,6 +74,19 @@ export function AssistantApp() {
       });
     return () => { cancelled = true; };
   }, [applyState]);
+
+  useEffect(() => {
+    if (screen !== "connected" && screen !== "offline") return;
+    const bridge = window.teacherlyft;
+    if (!bridge) return;
+
+    const timer = window.setInterval(() => {
+      void bridge.getDeviceState()
+        .then(applyState)
+        .catch(() => console.error("[renderer] periodic device validation rejected"));
+    }, DEVICE_REVALIDATION_INTERVAL_MS);
+    return () => window.clearInterval(timer);
+  }, [applyState, screen]);
 
   const connect = async () => {
     if (!canSubmitCode(code) || busy) return;

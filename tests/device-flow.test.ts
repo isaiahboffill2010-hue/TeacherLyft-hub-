@@ -71,10 +71,55 @@ describe("Electron main-process device flow", () => {
     expect(await store.loadDeviceCredential()).toBeNull();
   });
 
+  it.each([403, 404, 410])("deletes a credential when verification returns HTTP %s", async (status) => {
+    const store = await import("@/main/credential-store");
+    await store.saveDeviceCredential({ deviceId, deviceToken: token });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(meResponse(status)));
+    const { getLocalDeviceState } = await import("@/main/local-device");
+    expect(await getLocalDeviceState()).toEqual({ state: "unpaired", reason: "revoked" });
+    expect(await store.loadDeviceCredential()).toBeNull();
+  });
+
+  it("deletes a credential when the server says the device is disconnected", async () => {
+    const store = await import("@/main/credential-store");
+    await store.saveDeviceCredential({ deviceId, deviceToken: token });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      connected: false,
+      deviceId,
+      status: "disconnected",
+    }), { status: 200, headers: { "Content-Type": "application/json" } })));
+    const { getLocalDeviceState } = await import("@/main/local-device");
+    expect(await getLocalDeviceState()).toEqual({ state: "unpaired", reason: "revoked" });
+    expect(await store.loadDeviceCredential()).toBeNull();
+  });
+
+  it("deletes a credential when the server returns a different device identity", async () => {
+    const store = await import("@/main/credential-store");
+    await store.saveDeviceCredential({ deviceId, deviceToken: token });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      connected: true,
+      deviceId: "different-device",
+      deviceName: "TeacherLyft Assistant",
+      teacherDisplayName: "Ms. Rivera",
+    }), { status: 200, headers: { "Content-Type": "application/json" } })));
+    const { getLocalDeviceState } = await import("@/main/local-device");
+    expect(await getLocalDeviceState()).toEqual({ state: "unpaired", reason: "revoked" });
+    expect(await store.loadDeviceCredential()).toBeNull();
+  });
+
   it("keeps the credential and reports offline on network failure", async () => {
     const store = await import("@/main/credential-store");
     await store.saveDeviceCredential({ deviceId, deviceToken: token });
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("offline")));
+    const { getLocalDeviceState } = await import("@/main/local-device");
+    expect(await getLocalDeviceState()).toEqual({ state: "offline", paired: true });
+    expect(await store.loadDeviceCredential()).toEqual({ deviceId, deviceToken: token });
+  });
+
+  it("keeps the credential and reports offline during server downtime", async () => {
+    const store = await import("@/main/credential-store");
+    await store.saveDeviceCredential({ deviceId, deviceToken: token });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(meResponse(503)));
     const { getLocalDeviceState } = await import("@/main/local-device");
     expect(await getLocalDeviceState()).toEqual({ state: "offline", paired: true });
     expect(await store.loadDeviceCredential()).toEqual({ deviceId, deviceToken: token });
