@@ -83,9 +83,9 @@ describe("Electron security boundary", () => {
     expect(result.status).toBe(0);
   });
 
-  it("exposes only the four approved bridge methods", () => {
+  it("exposes only the five approved bridge methods, including dashboard", () => {
     const bridge = createTeacherLyftBridge(vi.fn());
-    expect(Object.keys(bridge).sort()).toEqual(["getDeviceState", "localDisconnect", "pair", "retryConnection"]);
+    expect(Object.keys(bridge).sort()).toEqual(["getDashboard", "getDeviceState", "localDisconnect", "pair", "retryConnection"]);
     expect(Object.isFrozen(bridge)).toBe(true);
   });
 
@@ -93,11 +93,21 @@ describe("Electron security boundary", () => {
     const invoke = vi.fn().mockResolvedValue({ state: "unpaired" });
     const bridge = createTeacherLyftBridge(invoke);
     await bridge.getDeviceState();
+    await bridge.getDashboard();
     await bridge.pair({ code: "123456" });
     await bridge.retryConnection();
     await bridge.localDisconnect();
     expect(invoke.mock.calls.map((call) => call[0])).toEqual(Object.values(IPC_CHANNELS));
     expect(JSON.stringify(invoke.mock.calls)).not.toContain("deviceToken");
+  });
+
+  it("keeps sender validation on every fixed IPC handler", async () => {
+    const handlers = await text("src/main/ipc-handlers.ts");
+    for (const channel of Object.keys(IPC_CHANNELS)) {
+      const start = handlers.indexOf(`IPC_CHANNELS.${channel}`);
+      expect(start, `${channel} handler missing`).toBeGreaterThan(-1);
+      expect(handlers.slice(start, start + 180)).toContain("requireTrustedSender(event, webContentsId)");
+    }
   });
 
   it("accepts exactly six numeric pairing digits", () => {

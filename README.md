@@ -172,6 +172,23 @@ TEACHERLYFT_PI_COMPATIBILITY=0 bash scripts/start-pi-x11.sh
 
 Startup diagnostics print only Electron version, platform, architecture, session type, display identifiers, sandbox mode, window creation, renderer load start, and renderer completion. They never include pairing codes, tokens, account data, or authorization headers.
 
+## Diagnostic log
+
+The Hub writes structured startup, credential lookup, server verification, IPC, preload, and renderer events to both the terminal and a rotating local log. The exact file path is printed as the `logging configured` event during startup.
+
+Default locations:
+
+- Raspberry Pi: `~/.config/teacherlyft-assistant/logs/teacherlyft-hub.log`
+- Windows: `%APPDATA%\teacherlyft-assistant\logs\teacherlyft-hub.log`
+
+Follow the Pi log live with:
+
+```bash
+tail -f ~/.config/teacherlyft-assistant/logs/teacherlyft-hub.log
+```
+
+The active log rotates at 2 MB to `teacherlyft-hub.previous.log`. Sensitive fields—including device tokens, authorization headers, credentials, pairing codes, device IDs, teacher names, and account data—are redacted before file output.
+
 ## Real-Pi acceptance test
 
 1. Before updating, record `sudo stat /var/lib/teacherlyft-assistant/device.json` and its checksum.

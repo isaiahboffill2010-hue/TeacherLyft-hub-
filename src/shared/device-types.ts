@@ -31,6 +31,7 @@ export type DeviceActionResult =
 
 export interface TeacherLyftBridge {
   getDeviceState(): Promise<LocalDeviceState>;
+  getDashboard(): Promise<import("@/shared/dashboard-types").DashboardResult>;
   pair(request: PairRequest): Promise<DeviceActionResult>;
   retryConnection(): Promise<LocalDeviceState>;
   localDisconnect(): Promise<LocalDeviceState>;

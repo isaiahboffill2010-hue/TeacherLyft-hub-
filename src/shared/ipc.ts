@@ -1,5 +1,6 @@
 export const IPC_CHANNELS = {
   getDeviceState: "teacherlyft:get-device-state",
+  getDashboard: "teacherlyft:get-dashboard",
   pair: "teacherlyft:pair",
   retryConnection: "teacherlyft:retry-connection",
   localDisconnect: "teacherlyft:local-disconnect",

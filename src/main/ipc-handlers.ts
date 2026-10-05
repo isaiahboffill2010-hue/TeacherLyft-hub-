@@ -1,14 +1,20 @@
 import type { IpcMainInvokeEvent } from "electron";
 import { ipcMain } from "electron";
-import { disconnectLocalDevice, getLocalDeviceState, LocalDeviceError, pairLocalDevice } from "@/main/local-device";
+import { disconnectLocalDevice, getLocalDashboard, getLocalDeviceState, LocalDeviceError, pairLocalDevice } from "@/main/local-device";
 import { TeacherLyftApiError } from "@/main/teacherlyft-api";
 import { IPC_CHANNELS, isValidPairRequest } from "@/shared/ipc";
 import type { DeviceActionResult } from "@/shared/device-types";
+import { diagnosticInfo, diagnosticWarn } from "@/main/diagnostic-log";
 
 function requireTrustedSender(event: IpcMainInvokeEvent, webContentsId: number): void {
   const senderUrl = event.senderFrame?.url;
   if (event.sender.id !== webContentsId || event.senderFrame !== event.sender.mainFrame
       || !senderUrl || !isTrustedRendererUrl(senderUrl)) {
+    diagnosticWarn("ipc", "sender_rejected", {
+      senderMatched: event.sender.id === webContentsId,
+      mainFrame: event.senderFrame === event.sender.mainFrame,
+      urlPresent: Boolean(senderUrl),
+    });
     throw new Error("Rejected untrusted IPC sender");
   }
 }
@@ -43,22 +49,33 @@ function safePairFailure(error: unknown): DeviceActionResult {
 }
 
 export function registerIpcHandlers(webContentsId: number): void {
+  diagnosticInfo("ipc", "handlers_registered", { webContentsId });
   ipcMain.handle(IPC_CHANNELS.getDeviceState, async (event) => {
     requireTrustedSender(event, webContentsId);
+    diagnosticInfo("ipc", "get_device_state_invoked");
     return getLocalDeviceState();
+  });
+  ipcMain.handle(IPC_CHANNELS.getDashboard, async (event) => {
+    requireTrustedSender(event, webContentsId);
+    diagnosticInfo("ipc", "get_dashboard_invoked");
+    return getLocalDashboard();
   });
   ipcMain.handle(IPC_CHANNELS.retryConnection, async (event) => {
     requireTrustedSender(event, webContentsId);
+    diagnosticInfo("ipc", "retry_connection_invoked");
     return getLocalDeviceState();
   });
   ipcMain.handle(IPC_CHANNELS.localDisconnect, async (event) => {
     requireTrustedSender(event, webContentsId);
+    diagnosticInfo("ipc", "local_disconnect_invoked");
     await disconnectLocalDevice();
     return { state: "unpaired" } as const;
   });
   ipcMain.handle(IPC_CHANNELS.pair, async (event, request: unknown): Promise<DeviceActionResult> => {
     requireTrustedSender(event, webContentsId);
+    diagnosticInfo("ipc", "pair_invoked");
     if (!isValidPairRequest(request)) {
+      diagnosticWarn("ipc", "pair_request_invalid");
       return { ok: false, error: "invalid_code", message: "Enter all six digits before connecting." };
     }
     try { return { ok: true, state: await pairLocalDevice(request.code) }; }

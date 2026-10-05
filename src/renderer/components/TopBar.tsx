@@ -4,13 +4,15 @@ type Props = {
   connection: "connected" | "offline";
   onRetry: () => void;
   retrying: boolean;
+  onRefresh: () => void;
+  refreshing: boolean;
 };
 
 function currentMinute(): Date {
   return new Date();
 }
 
-export function TopBar({ connection, onRetry, retrying }: Props) {
+export function TopBar({ connection, onRetry, retrying, onRefresh, refreshing }: Props) {
   const [now, setNow] = useState(currentMinute);
 
   useEffect(() => {
@@ -24,6 +26,9 @@ export function TopBar({ connection, onRetry, retrying }: Props) {
       <div><strong>TeacherLyft Hub</strong><span>Less Work. More Teaching.</span></div>
     </div>
     <div className="hub-topbar-right">
+      {connection === "connected" && <button className="refresh-button" onClick={onRefresh} disabled={refreshing}>
+        {refreshing ? "Refreshing…" : "Refresh"}
+      </button>}
       <button className={`connection-pill ${connection}`} onClick={connection === "offline" ? onRetry : undefined} disabled={retrying || connection === "connected"}>
         <span aria-hidden="true" />{retrying ? "Checking…" : connection === "connected" ? "Connected" : "Offline · Retry"}
       </button>
