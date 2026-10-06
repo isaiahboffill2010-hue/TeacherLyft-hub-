@@ -1,5 +1,18 @@
 import { useState } from "react";
 import type { HubAssignment, HubClass, HubConcept, HubDraft, HubProgressClass, HubTextbook } from "@/shared/content-types";
+import { HubIcon, type IconName } from "@/renderer/components/HubIcon";
+
+export type MoreSection = "curriculum" | "drafts" | "library" | "settings";
+
+export function MorePage({ onOpen }: { onOpen: (section: MoreSection) => void }) {
+  const items: Array<{ id: MoreSection; title: string; detail: string; icon: IconName }> = [
+    { id: "curriculum", title: "Curriculum", detail: "View textbooks and materials", icon: "curriculum" },
+    { id: "drafts", title: "Drafts", detail: "View TeacherLyft drafts", icon: "drafts" },
+    { id: "library", title: "Library", detail: "Solution library and resources", icon: "library" },
+    { id: "settings", title: "Settings", detail: "Hub and TeacherLyft settings", icon: "settings" },
+  ];
+  return <Page title="More" subtitle="More TeacherLyft tools"><div className="more-grid">{items.map((item) => <button className="more-tile" key={item.id} onClick={() => onOpen(item.id)}><span className="more-icon"><HubIcon name={item.icon}/></span><span><strong>{item.title}</strong><small>{item.detail}</small></span><HubIcon name="arrow"/></button>)}</div></Page>;
+}
 
 export function DataState({ loading, error, empty, children }: { loading: boolean; error: boolean; empty: boolean; children: React.ReactNode }) {
   if (loading) return <div className="screen-state" aria-busy="true">Loading current TeacherLyft data…</div>;

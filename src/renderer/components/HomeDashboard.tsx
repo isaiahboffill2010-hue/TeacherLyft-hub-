@@ -30,7 +30,7 @@ type Props = {
   unavailable: boolean;
   dashboardError?: boolean;
   onRetry?: () => void;
-  onNavigate?: (target: "classes" | "assignments" | "students" | "settings") => void;
+  onNavigate?: (target: "classes" | "assignments" | "progress" | "more") => void;
 };
 
 export function HomeDashboard({ dashboard, loading, teacherName, unavailable, dashboardError = false, onRetry, onNavigate }: Props) {
@@ -54,7 +54,7 @@ export function HomeDashboard({ dashboard, loading, teacherName, unavailable, da
     </section>
 
     <section className="stats-grid" aria-label="Classroom statistics" aria-busy={loading}>
-      {statDefinitions.map((stat) => <button className="stat-card" key={stat.key} onClick={() => onNavigate?.(stat.key === "classes" ? "classes" : stat.key === "toGrade" ? "assignments" : stat.key === "students" ? "students" : "settings")}>
+      {statDefinitions.map((stat) => <button className="stat-card" key={stat.key} onClick={() => onNavigate?.(stat.key === "classes" ? "classes" : stat.key === "toGrade" ? "assignments" : stat.key === "students" ? "progress" : "more")}>
         <div className={`icon-tile ${stat.tone}`}><HubIcon name={stat.icon}/></div>
         <div><span>{stat.label}</span>
           {loading ? <span className="stat-skeleton" aria-label={`${stat.label} loading`} /> : <strong>{dashboard ? dashboard[stat.key] : "—"}</strong>}

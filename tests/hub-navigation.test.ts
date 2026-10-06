@@ -1,15 +1,26 @@
 import { createElement } from "react";
+import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { BottomNav } from "@/renderer/components/BottomNav";
-import { ClassesPage, AssignmentsPage, ProgressPage, SimpleCardsPage } from "@/renderer/components/ContentPages";
+import { ClassesPage, AssignmentsPage, MorePage, ProgressPage, SimpleCardsPage } from "@/renderer/components/ContentPages";
 
 describe("touch companion navigation and data states", () => {
-  it("has all eight intended sections and no Assistant navigation item", () => {
+  it("has exactly the five Hub bottom tabs and no Assistant navigation item", () => {
     const html = renderToStaticMarkup(createElement(BottomNav, { active: "home", onChange: vi.fn() }));
-    for (const label of ["Home", "Classes", "Assignments", "Curriculum", "Student Progress", "Drafts", "Library", "Settings"]) expect(html).toContain(label);
+    for (const label of ["Home", "Classes", "Assignments", "Progress", "More"]) expect(html).toContain(label);
+    for (const label of ["Curriculum", "Drafts", "Library", "Settings"]) expect(html).not.toContain(`>${label}<`);
+    expect(html.match(/<button/g)).toHaveLength(5);
     expect(html).not.toContain(">Assistant<");
     expect(html).toContain('aria-current="page"');
+    expect(html).toContain('class="bottom-nav"');
+  });
+
+  it("marks the active bottom tab and exposes secondary tools through More", () => {
+    const nav = renderToStaticMarkup(createElement(BottomNav, { active: "more", onChange: vi.fn() }));
+    expect(nav).toMatch(/class="active" aria-current="page"[^>]*>.*More/s);
+    const more = renderToStaticMarkup(createElement(MorePage, { onOpen: vi.fn() }));
+    for (const label of ["Curriculum", "Drafts", "Library", "Settings"]) expect(more).toContain(label);
   });
 
   it("renders real class data and class selection controls", () => {
@@ -28,5 +39,11 @@ describe("touch companion navigation and data states", () => {
     expect(renderToStaticMarkup(createElement(ClassesPage, { items: [], loading: false, error: false }))).toContain("Nothing to show yet");
     expect(renderToStaticMarkup(createElement(ClassesPage, { items: [], loading: false, error: true }))).toContain("unavailable");
     expect(renderToStaticMarkup(createElement(SimpleCardsPage, { title: "Curriculum", subtitle: "Books", items: [], loading: false, error: false, unavailable: true }))).toContain("not available");
+  });
+
+  it("does not render or define a permanent sidebar", () => {
+    const source = readFileSync(new URL("../src/renderer/components/HubDashboard.tsx", import.meta.url), "utf8");
+    expect(source).not.toContain("hub-sidebar");
+    expect(source).toContain("<BottomNav");
   });
 });

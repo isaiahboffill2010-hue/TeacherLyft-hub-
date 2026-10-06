@@ -3,21 +3,22 @@ import type { DashboardResponse } from "@/shared/dashboard-types";
 import type { HubContent } from "@/shared/content-types";
 import { BottomNav, type HubTab } from "@/renderer/components/BottomNav";
 import { HomeDashboard } from "@/renderer/components/HomeDashboard";
-import { AssignmentsPage, ClassesPage, ProgressPage, SettingsPage, SimpleCardsPage } from "@/renderer/components/ContentPages";
+import { AssignmentsPage, ClassesPage, MorePage, ProgressPage, SettingsPage, SimpleCardsPage, type MoreSection } from "@/renderer/components/ContentPages";
 import { TopBar } from "@/renderer/components/TopBar";
 
 type Props = { connection: "connected" | "offline"; teacherName: string | null; retrying: boolean; onRetry: () => void };
+type Section = HubTab | MoreSection;
 type ContentState = Partial<HubContent>;
 type BridgeLoad = keyof Pick<NonNullable<Window["teacherlyft"]>, "getClasses" | "getAssignments" | "getStudentProgress" | "getCurriculum" | "getDrafts" | "getLibrary">;
-const loaderFor: Partial<Record<HubTab, BridgeLoad>> = { classes: "getClasses", assignments: "getAssignments", students: "getStudentProgress", curriculum: "getCurriculum", drafts: "getDrafts", library: "getLibrary" };
-const dataKeyFor = { classes: "classes", assignments: "assignments", students: "progress", curriculum: "curriculum", drafts: "drafts", library: "library" } as const;
+const loaderFor: Partial<Record<Section, BridgeLoad>> = { classes: "getClasses", assignments: "getAssignments", progress: "getStudentProgress", curriculum: "getCurriculum", drafts: "getDrafts", library: "getLibrary" };
+const dataKeyFor = { classes: "classes", assignments: "assignments", progress: "progress", curriculum: "curriculum", drafts: "drafts", library: "library" } as const;
 
 export function HubDashboard({ connection, teacherName, retrying, onRetry }: Props) {
-  const [activeTab, setActiveTab] = useState<HubTab>("home");
+  const [activeSection, setActiveSection] = useState<Section>("home");
   const [dashboard, setDashboard] = useState<DashboardResponse | null>(null);
   const [content, setContent] = useState<ContentState>({});
-  const [loading, setLoading] = useState<HubTab | null>(null);
-  const [errors, setErrors] = useState<Partial<Record<HubTab, boolean>>>({});
+  const [loading, setLoading] = useState<Section | null>(null);
+  const [errors, setErrors] = useState<Partial<Record<Section, boolean>>>({});
 
   const refreshDashboard = useCallback(async () => {
     if (!window.teacherlyft || connection !== "connected") return;
@@ -26,39 +27,42 @@ export function HubDashboard({ connection, teacherName, retrying, onRetry }: Pro
     catch { setErrors((v) => ({ ...v, home: true })); } finally { setLoading(null); }
   }, [connection]);
 
-  const loadSection = useCallback(async (tab: HubTab) => {
+  const loadSection = useCallback(async (section: Section) => {
     const bridge = window.teacherlyft;
-    const loader = loaderFor[tab];
+    const loader = loaderFor[section];
     if (!bridge || !loader || connection !== "connected") return;
-    setLoading(tab); setErrors((value) => ({ ...value, [tab]: false }));
+    setLoading(section); setErrors((value) => ({ ...value, [section]: false }));
     try {
       const result = await bridge[loader]();
-      const key = dataKeyFor[tab as keyof typeof dataKeyFor];
+      const key = dataKeyFor[section as keyof typeof dataKeyFor];
       if (result.ok) setContent((value) => ({ ...value, [key]: result.data }));
-      else setErrors((value) => ({ ...value, [tab]: true }));
-    } catch { setErrors((value) => ({ ...value, [tab]: true })); }
+      else setErrors((value) => ({ ...value, [section]: true }));
+    } catch { setErrors((value) => ({ ...value, [section]: true })); }
     finally { setLoading(null); }
   }, [connection]);
 
   useEffect(() => { if (connection === "connected") void refreshDashboard(); }, [connection, refreshDashboard]);
   useEffect(() => {
-    if (activeTab === "home" || activeTab === "settings") return;
-    const key = dataKeyFor[activeTab];
-    if (!content[key]) void loadSection(activeTab);
-  }, [activeTab, content, loadSection]);
+    if (!(activeSection in dataKeyFor)) return;
+    const key = dataKeyFor[activeSection as keyof typeof dataKeyFor];
+    if (!content[key]) void loadSection(activeSection);
+  }, [activeSection, content, loadSection]);
 
-  const refresh = () => activeTab === "home" ? void refreshDashboard() : void loadSection(activeTab);
-  const busy = loading === activeTab;
-  const key = activeTab !== "home" && activeTab !== "settings" ? dataKeyFor[activeTab] : null;
-  const error = Boolean(errors[activeTab]) || Boolean(connection === "offline" && key && !content[key]);
-  const page = activeTab === "home" ? <HomeDashboard dashboard={dashboard} loading={loading === "home" && !dashboard} teacherName={dashboard?.teacherName || teacherName || "Teacher"} unavailable={!dashboard && connection === "offline"} dashboardError={Boolean(errors.home)} onRetry={() => void refreshDashboard()} onNavigate={setActiveTab}/>
-    : activeTab === "classes" ? <ClassesPage items={content.classes?.classes ?? []} loading={busy} error={error}/>
-    : activeTab === "assignments" ? <AssignmentsPage items={content.assignments?.assignments ?? []} loading={busy} error={error}/>
-    : activeTab === "students" ? <ProgressPage classes={content.progress?.classes ?? []} loading={busy} error={error}/>
-    : activeTab === "curriculum" ? <SimpleCardsPage title="Curriculum" subtitle="My Curriculum textbooks and processing status" items={content.curriculum?.textbooks ?? []} loading={busy} error={error} unavailable={content.curriculum?.available === false}/>
-    : activeTab === "drafts" ? <SimpleCardsPage title="Drafts" subtitle="Classroom work still needing TeacherLyft setup" items={content.drafts?.drafts ?? []} loading={busy} error={error}/>
-    : activeTab === "library" ? <SimpleCardsPage title="Library" subtitle="Solution concepts and existing teaching methods" items={content.library?.concepts ?? []} loading={busy} error={error}/>
+  const selectPrimary = (tab: HubTab) => setActiveSection(tab);
+  const refresh = () => activeSection === "home" ? void refreshDashboard() : void loadSection(activeSection);
+  const busy = loading === activeSection;
+  const key = activeSection in dataKeyFor ? dataKeyFor[activeSection as keyof typeof dataKeyFor] : null;
+  const error = Boolean(errors[activeSection]) || Boolean(connection === "offline" && key && !content[key]);
+  const page = activeSection === "home" ? <HomeDashboard dashboard={dashboard} loading={loading === "home" && !dashboard} teacherName={dashboard?.teacherName || teacherName || "Teacher"} unavailable={!dashboard && connection === "offline"} dashboardError={Boolean(errors.home)} onRetry={() => void refreshDashboard()} onNavigate={selectPrimary}/>
+    : activeSection === "classes" ? <ClassesPage items={content.classes?.classes ?? []} loading={busy} error={error}/>
+    : activeSection === "assignments" ? <AssignmentsPage items={content.assignments?.assignments ?? []} loading={busy} error={error}/>
+    : activeSection === "progress" ? <ProgressPage classes={content.progress?.classes ?? []} loading={busy} error={error}/>
+    : activeSection === "more" ? <MorePage onOpen={setActiveSection}/>
+    : activeSection === "curriculum" ? <SimpleCardsPage title="Curriculum" subtitle="My Curriculum textbooks and processing status" items={content.curriculum?.textbooks ?? []} loading={busy} error={error} unavailable={content.curriculum?.available === false}/>
+    : activeSection === "drafts" ? <SimpleCardsPage title="Drafts" subtitle="Classroom work still needing TeacherLyft setup" items={content.drafts?.drafts ?? []} loading={busy} error={error}/>
+    : activeSection === "library" ? <SimpleCardsPage title="Library" subtitle="Solution concepts and existing teaching methods" items={content.library?.concepts ?? []} loading={busy} error={error}/>
     : <SettingsPage connection={connection} onDisconnect={() => void window.teacherlyft?.localDisconnect().then(() => window.location.reload())}/>;
 
-  return <div className="hub-shell"><BottomNav active={activeTab} onChange={setActiveTab}/><div className="hub-main"><TopBar connection={connection} onRetry={onRetry} retrying={retrying} onRefresh={refresh} refreshing={busy}/><main className="hub-content">{page}</main></div></div>;
+  const activeTab: HubTab = activeSection === "curriculum" || activeSection === "drafts" || activeSection === "library" || activeSection === "settings" ? "more" : activeSection;
+  return <div className="hub-shell"><TopBar connection={connection} onRetry={onRetry} retrying={retrying} onRefresh={refresh} refreshing={busy}/><main className="hub-content">{activeSection !== "more" && activeTab === "more" && <button className="back-to-more" onClick={() => setActiveSection("more")}>‹ More</button>}{page}</main><BottomNav active={activeTab} onChange={selectPrimary}/></div>;
 }
