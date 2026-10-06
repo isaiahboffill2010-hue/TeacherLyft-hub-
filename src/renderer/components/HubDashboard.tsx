@@ -57,7 +57,7 @@ export function HubDashboard({ connection, teacherName, retrying, onRetry }: Pro
   }, [activeSection, content, loadSection]);
 
   const selectPrimary = (tab: HubTab) => setActiveSection(tab);
-  const refresh = () => activeSection === "home" ? void refreshDashboard() : void loadSection(activeSection);
+  const refresh = () => detail ? void openDetail(detail.request) : activeSection === "home" ? void refreshDashboard() : void loadSection(activeSection);
   const busy = loading === activeSection;
   const key = activeSection in dataKeyFor ? dataKeyFor[activeSection as keyof typeof dataKeyFor] : null;
   const error = Boolean(errors[activeSection]) || Boolean(connection === "offline" && key && !content[key]);
@@ -72,6 +72,6 @@ export function HubDashboard({ connection, teacherName, retrying, onRetry }: Pro
     : <SettingsPage connection={connection} onDisconnect={() => void window.teacherlyft?.localDisconnect().then(() => window.location.reload())}/>;
 
   const activeTab: HubTab = activeSection === "curriculum" || activeSection === "drafts" || activeSection === "library" || activeSection === "settings" ? "more" : activeSection;
-  const visible = detail ? <DetailPage kind={detail.request.kind as DetailKind} data={detail.data} loading={detail.loading} error={detail.error} onBack={()=>setDetail(null)} onOpenStudent={(classId,id)=>void openDetail({kind:"student",classId,id})}/> : page;
+  const visible = detail ? <DetailPage kind={detail.request.kind as DetailKind} data={detail.data} loading={detail.loading} error={detail.error} onBack={()=>setDetail(null)} onRetry={()=>void openDetail(detail.request)} onOpenStudent={(classId,id)=>void openDetail({kind:"student",classId,id})}/> : page;
   return <div className="hub-shell"><TopBar connection={connection} onRetry={onRetry} retrying={retrying} onRefresh={refresh} refreshing={busy}/><main className="hub-content">{!detail&&activeSection !== "more" && activeTab === "more" && <button className="back-to-more" onClick={() => setActiveSection("more")}>‹ More</button>}{visible}</main><BottomNav active={activeTab} onChange={(tab)=>{setDetail(null);selectPrimary(tab)}}/></div>;
 }

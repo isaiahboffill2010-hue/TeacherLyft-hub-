@@ -4,7 +4,13 @@ import { diagnosticInfo, diagnosticWarn } from "@/main/diagnostic-log";
 import type { DashboardAttentionItem, DashboardAttentionKind, DashboardResponse } from "@/shared/dashboard-types";
 import type { DetailRequest, HubContent } from "@/shared/content-types";
 
-const REQUEST_TIMEOUT_MS = 10_000;
+export const REQUEST_TIMEOUTS = {
+  authentication: 10_000,
+  pairing: 15_000,
+  dashboard: 30_000,
+  content: 90_000,
+  detail: 120_000,
+} as const;
 const INVALID_DEVICE_STATUSES = new Set([400, 401, 403, 404, 410, 422]);
 type DeviceVerificationResponse = {
   connected?: unknown;
@@ -47,30 +53,35 @@ function nestedCode(error: unknown): string | undefined {
   return undefined;
 }
 
-async function request(pathname: string, init: RequestInit): Promise<Response> {
-  diagnosticInfo("api", "request_started", { method: init.method ?? "GET", pathname });
+async function request(pathname: string, init: RequestInit, timeoutMs: number): Promise<Response> {
+  const startedAt = Date.now();
+  const isDeviceContent = pathname.startsWith("/api/device/") && pathname !== "/api/device/me";
+  const endpoint = pathname
+    .replace(/^\/api\/device\/(classes|assignments|curriculum|drafts|library)\/[^/]+/, "/api/device/$1/:id")
+    .replace(/\/students\/[^/]+$/, "/students/:id");
+  diagnosticInfo("api", isDeviceContent ? "device_content_request_started" : "request_started", { method: init.method ?? "GET", endpoint, configuredTimeoutMs: timeoutMs });
   try {
     const response = await fetch(new URL(pathname, baseUrl()), {
       ...init,
       cache: "no-store",
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      signal: AbortSignal.timeout(timeoutMs),
       headers: { Accept: "application/json", ...init.headers },
     });
-    diagnosticInfo("api", "response_received", { method: init.method ?? "GET", pathname, status: response.status });
+    diagnosticInfo("api", isDeviceContent ? "device_content_request_completed" : "response_received", { method: init.method ?? "GET", endpoint, status: response.status, durationMs: Date.now() - startedAt, configuredTimeoutMs: timeoutMs });
     return response;
   } catch (error) {
     if (error instanceof TeacherLyftApiError) throw error;
     const code = nestedCode(error);
     const name = error instanceof Error ? error.name : "";
     if (name === "TimeoutError" || name === "AbortError" || code === "UND_ERR_CONNECT_TIMEOUT") {
-      diagnosticWarn("api", "request_failed", { pathname, kind: "timeout", causeCode: code });
+      diagnosticWarn("api", "request_failed", { endpoint, kind: "timeout", causeCode: code, elapsedMs: Date.now() - startedAt, configuredTimeoutMs: timeoutMs });
       throw new TeacherLyftApiError("timeout", "TeacherLyft request timed out", undefined, code);
     }
     if (code === "ENOTFOUND" || code === "EAI_AGAIN" || code === "EAI_FAIL") {
-      diagnosticWarn("api", "request_failed", { pathname, kind: "dns", causeCode: code });
+      diagnosticWarn("api", "request_failed", { endpoint, kind: "dns", causeCode: code });
       throw new TeacherLyftApiError("dns", "TeacherLyft hostname lookup failed", undefined, code);
     }
-    diagnosticWarn("api", "request_failed", { pathname, kind: "tcp", causeCode: code });
+    diagnosticWarn("api", "request_failed", { endpoint, kind: "tcp", causeCode: code });
     throw new TeacherLyftApiError("tcp", "TeacherLyft connection failed", undefined, code);
   }
 }
@@ -85,7 +96,7 @@ export async function pairWithTeacherLyft(code: string): Promise<DeviceCredentia
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ code, name: "TeacherLyft Assistant" }),
-  });
+  }, REQUEST_TIMEOUTS.pairing);
   if (response.status === 400) throw new TeacherLyftApiError("invalid_code", "The pairing code is invalid or expired", 400);
   if (!response.ok) throw new TeacherLyftApiError("http", `Pairing returned HTTP ${response.status}`, response.status);
   const body = await safeJson(response) as { success?: unknown; deviceId?: unknown; deviceToken?: unknown };
@@ -100,7 +111,7 @@ export async function verifyWithTeacherLyft(credential: DeviceCredential): Promi
   const response = await request("/api/device/me", {
     method: "GET",
     headers: { Authorization: `Bearer ${credential.deviceToken}` },
-  });
+  }, REQUEST_TIMEOUTS.authentication);
   if (INVALID_DEVICE_STATUSES.has(response.status)) {
     diagnosticWarn("device_verification", "authorization_rejected", { status: response.status });
     throw new TeacherLyftApiError("unauthorized", "Device credential is no longer authorized", response.status);
@@ -169,7 +180,7 @@ export async function fetchTeacherLyftDashboard(credential: DeviceCredential): P
   const response = await request("/api/device/dashboard", {
     method: "GET",
     headers: { Authorization: `Bearer ${credential.deviceToken}` },
-  });
+  }, REQUEST_TIMEOUTS.dashboard);
   if (INVALID_DEVICE_STATUSES.has(response.status)) {
     throw new TeacherLyftApiError("unauthorized", "Device credential is no longer authorized", response.status);
   }
@@ -193,7 +204,7 @@ export async function fetchTeacherLyftContent<K extends keyof HubContent>(
   const response = await request(SECTION_PATHS[section], {
     method: "GET",
     headers: { Authorization: `Bearer ${credential.deviceToken}` },
-  });
+  }, REQUEST_TIMEOUTS.content);
   if (INVALID_DEVICE_STATUSES.has(response.status)) {
     throw new TeacherLyftApiError("unauthorized", "Device credential is no longer authorized", response.status);
   }
@@ -213,7 +224,7 @@ export async function fetchTeacherLyftDetail(credential: DeviceCredential, detai
     draft: `/api/device/drafts/${id}`,
     library: `/api/device/library/${id}`,
   } as const;
-  const response = await request(paths[detail.kind], { method: "GET", headers: { Authorization: `Bearer ${credential.deviceToken}` } });
+  const response = await request(paths[detail.kind], { method: "GET", headers: { Authorization: `Bearer ${credential.deviceToken}` } }, REQUEST_TIMEOUTS.detail);
   if (response.status === 404) throw new TeacherLyftApiError("http", "Detail not found", 404);
   if (INVALID_DEVICE_STATUSES.has(response.status)) throw new TeacherLyftApiError("unauthorized", "Device credential is no longer authorized", response.status);
   if (!response.ok) throw new TeacherLyftApiError("http", `Detail returned HTTP ${response.status}`, response.status);

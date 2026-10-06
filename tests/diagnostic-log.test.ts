@@ -39,4 +39,10 @@ describe("diagnostic logging", () => {
     expect(content).toContain('"event":"verification_started"');
     expect(content.trim().split("\n")).toHaveLength(2);
   });
+
+  it("keeps timing metadata while redacting credentials", () => {
+    const entry=formatDiagnosticEntry("warn","api","request_failed",{endpoint:"/api/device/assignments",kind:"timeout",elapsedMs:90000,configuredTimeoutMs:90000,authorization:"Bearer private",deviceToken:"private"});
+    expect(entry).toContain('"elapsedMs":90000'); expect(entry).toContain('"configuredTimeoutMs":90000'); expect(entry).toContain("/api/device/assignments");
+    expect(entry).not.toContain("Bearer private"); expect(entry).not.toContain('"deviceToken":"private"');
+  });
 });
