@@ -3,7 +3,7 @@ import type { DashboardResponse } from "@/shared/dashboard-types";
 import type { HubContent } from "@/shared/content-types";
 import { BottomNav, type HubTab } from "@/renderer/components/BottomNav";
 import { HomeDashboard } from "@/renderer/components/HomeDashboard";
-import { AssignmentsPage, ClassesPage, MorePage, ProgressPage, SettingsPage, SimpleCardsPage, type MoreSection } from "@/renderer/components/ContentPages";
+import { AssignmentsPage, ClassesPage, CurriculumPage, DraftsPage, LibraryPage, MorePage, ProgressPage, SettingsPage, type MoreSection } from "@/renderer/components/ContentPages";
 import { TopBar } from "@/renderer/components/TopBar";
 
 type Props = { connection: "connected" | "offline"; teacherName: string | null; retrying: boolean; onRetry: () => void };
@@ -58,9 +58,9 @@ export function HubDashboard({ connection, teacherName, retrying, onRetry }: Pro
     : activeSection === "assignments" ? <AssignmentsPage items={content.assignments?.assignments ?? []} loading={busy} error={error}/>
     : activeSection === "progress" ? <ProgressPage classes={content.progress?.classes ?? []} loading={busy} error={error}/>
     : activeSection === "more" ? <MorePage onOpen={setActiveSection}/>
-    : activeSection === "curriculum" ? <SimpleCardsPage title="Curriculum" subtitle="My Curriculum textbooks and processing status" items={content.curriculum?.textbooks ?? []} loading={busy} error={error} unavailable={content.curriculum?.available === false}/>
-    : activeSection === "drafts" ? <SimpleCardsPage title="Drafts" subtitle="Classroom work still needing TeacherLyft setup" items={content.drafts?.drafts ?? []} loading={busy} error={error}/>
-    : activeSection === "library" ? <SimpleCardsPage title="Library" subtitle="Solution concepts and existing teaching methods" items={content.library?.concepts ?? []} loading={busy} error={error}/>
+    : activeSection === "curriculum" ? <CurriculumPage items={content.curriculum?.textbooks ?? []} loading={busy} error={error} unavailable={content.curriculum?.available === false}/>
+    : activeSection === "drafts" ? <DraftsPage items={content.drafts?.drafts ?? []} loading={busy} error={error}/>
+    : activeSection === "library" ? <LibraryPage items={content.library?.concepts ?? []} loading={busy} error={error}/>
     : <SettingsPage connection={connection} onDisconnect={() => void window.teacherlyft?.localDisconnect().then(() => window.location.reload())}/>;
 
   const activeTab: HubTab = activeSection === "curriculum" || activeSection === "drafts" || activeSection === "library" || activeSection === "settings" ? "more" : activeSection;
