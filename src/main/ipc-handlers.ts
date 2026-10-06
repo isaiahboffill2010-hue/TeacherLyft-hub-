@@ -1,6 +1,6 @@
 import type { IpcMainInvokeEvent } from "electron";
 import { ipcMain } from "electron";
-import { disconnectLocalDevice, getLocalDashboard, getLocalDeviceState, LocalDeviceError, pairLocalDevice } from "@/main/local-device";
+import { disconnectLocalDevice, getLocalContent, getLocalDashboard, getLocalDeviceState, LocalDeviceError, pairLocalDevice } from "@/main/local-device";
 import { TeacherLyftApiError } from "@/main/teacherlyft-api";
 import { IPC_CHANNELS, isValidPairRequest } from "@/shared/ipc";
 import type { DeviceActionResult } from "@/shared/device-types";
@@ -60,6 +60,21 @@ export function registerIpcHandlers(webContentsId: number): void {
     diagnosticInfo("ipc", "get_dashboard_invoked");
     return getLocalDashboard();
   });
+  const contentHandlers = [
+    [IPC_CHANNELS.getClasses, "classes"],
+    [IPC_CHANNELS.getAssignments, "assignments"],
+    [IPC_CHANNELS.getStudentProgress, "progress"],
+    [IPC_CHANNELS.getCurriculum, "curriculum"],
+    [IPC_CHANNELS.getDrafts, "drafts"],
+    [IPC_CHANNELS.getLibrary, "library"],
+  ] as const;
+  for (const [channel, section] of contentHandlers) {
+    ipcMain.handle(channel, async (event) => {
+      requireTrustedSender(event, webContentsId);
+      diagnosticInfo("ipc", `${section}_invoked`);
+      return getLocalContent(section);
+    });
+  }
   ipcMain.handle(IPC_CHANNELS.retryConnection, async (event) => {
     requireTrustedSender(event, webContentsId);
     diagnosticInfo("ipc", "retry_connection_invoked");

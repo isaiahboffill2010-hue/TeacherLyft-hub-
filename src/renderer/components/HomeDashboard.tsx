@@ -30,9 +30,10 @@ type Props = {
   unavailable: boolean;
   dashboardError?: boolean;
   onRetry?: () => void;
+  onNavigate?: (target: "classes" | "assignments" | "students" | "settings") => void;
 };
 
-export function HomeDashboard({ dashboard, loading, teacherName, unavailable, dashboardError = false, onRetry }: Props) {
+export function HomeDashboard({ dashboard, loading, teacherName, unavailable, dashboardError = false, onRetry, onNavigate }: Props) {
   const [voiceNotice, setVoiceNotice] = useState(false);
   return <>
     {dashboardError && <div className="dashboard-message" role="status">
@@ -53,13 +54,13 @@ export function HomeDashboard({ dashboard, loading, teacherName, unavailable, da
     </section>
 
     <section className="stats-grid" aria-label="Classroom statistics" aria-busy={loading}>
-      {statDefinitions.map((stat) => <article className="stat-card" key={stat.key}>
+      {statDefinitions.map((stat) => <button className="stat-card" key={stat.key} onClick={() => onNavigate?.(stat.key === "classes" ? "classes" : stat.key === "toGrade" ? "assignments" : stat.key === "students" ? "students" : "settings")}>
         <div className={`icon-tile ${stat.tone}`}><HubIcon name={stat.icon}/></div>
         <div><span>{stat.label}</span>
           {loading ? <span className="stat-skeleton" aria-label={`${stat.label} loading`} /> : <strong>{dashboard ? dashboard[stat.key] : "—"}</strong>}
           <p>{loading ? "Loading..." : dashboard ? "Current value" : "Unavailable"}</p>
         </div>
-      </article>)}
+      </button>)}
     </section>
 
     <section className="attention-section" aria-busy={loading}>

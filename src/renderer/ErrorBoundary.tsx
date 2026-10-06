@@ -11,6 +11,8 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(_error: Error, _info: ErrorInfo): void {
+    void _error;
+    void _info;
     console.error("[renderer] React error boundary caught an exception");
   }
 

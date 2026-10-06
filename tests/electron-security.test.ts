@@ -83,9 +83,12 @@ describe("Electron security boundary", () => {
     expect(result.status).toBe(0);
   });
 
-  it("exposes only the five approved bridge methods, including dashboard", () => {
+  it("exposes only the explicitly approved bridge methods", () => {
     const bridge = createTeacherLyftBridge(vi.fn());
-    expect(Object.keys(bridge).sort()).toEqual(["getDashboard", "getDeviceState", "localDisconnect", "pair", "retryConnection"]);
+    expect(Object.keys(bridge).sort()).toEqual([
+      "getAssignments", "getClasses", "getCurriculum", "getDashboard", "getDeviceState",
+      "getDrafts", "getLibrary", "getStudentProgress", "localDisconnect", "pair", "retryConnection",
+    ]);
     expect(Object.isFrozen(bridge)).toBe(true);
   });
 
@@ -94,6 +97,12 @@ describe("Electron security boundary", () => {
     const bridge = createTeacherLyftBridge(invoke);
     await bridge.getDeviceState();
     await bridge.getDashboard();
+    await bridge.getClasses();
+    await bridge.getAssignments();
+    await bridge.getStudentProgress();
+    await bridge.getCurriculum();
+    await bridge.getDrafts();
+    await bridge.getLibrary();
     await bridge.pair({ code: "123456" });
     await bridge.retryConnection();
     await bridge.localDisconnect();
@@ -103,11 +112,15 @@ describe("Electron security boundary", () => {
 
   it("keeps sender validation on every fixed IPC handler", async () => {
     const handlers = await text("src/main/ipc-handlers.ts");
-    for (const channel of Object.keys(IPC_CHANNELS)) {
+    for (const channel of ["getDeviceState", "getDashboard", "retryConnection", "localDisconnect", "pair"] as const) {
       const start = handlers.indexOf(`IPC_CHANNELS.${channel}`);
       expect(start, `${channel} handler missing`).toBeGreaterThan(-1);
       expect(handlers.slice(start, start + 180)).toContain("requireTrustedSender(event, webContentsId)");
     }
+    for (const channel of ["getClasses", "getAssignments", "getStudentProgress", "getCurriculum", "getDrafts", "getLibrary"] as const) {
+      expect(handlers).toContain(`IPC_CHANNELS.${channel}`);
+    }
+    expect(handlers).toMatch(/for \(const \[channel, section\][\s\S]*ipcMain\.handle\(channel[\s\S]*requireTrustedSender\(event, webContentsId\)/);
   });
 
   it("accepts exactly six numeric pairing digits", () => {

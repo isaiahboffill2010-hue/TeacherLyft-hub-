@@ -32,6 +32,12 @@ export type DeviceActionResult =
 export interface TeacherLyftBridge {
   getDeviceState(): Promise<LocalDeviceState>;
   getDashboard(): Promise<import("@/shared/dashboard-types").DashboardResult>;
+  getClasses(): Promise<import("@/shared/content-types").ContentResult<"classes">>;
+  getAssignments(): Promise<import("@/shared/content-types").ContentResult<"assignments">>;
+  getStudentProgress(): Promise<import("@/shared/content-types").ContentResult<"progress">>;
+  getCurriculum(): Promise<import("@/shared/content-types").ContentResult<"curriculum">>;
+  getDrafts(): Promise<import("@/shared/content-types").ContentResult<"drafts">>;
+  getLibrary(): Promise<import("@/shared/content-types").ContentResult<"library">>;
   pair(request: PairRequest): Promise<DeviceActionResult>;
   retryConnection(): Promise<LocalDeviceState>;
   localDisconnect(): Promise<LocalDeviceState>;

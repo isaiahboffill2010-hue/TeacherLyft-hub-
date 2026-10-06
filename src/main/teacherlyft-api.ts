@@ -2,6 +2,7 @@ import type { ConnectedDevice, DeviceCredential } from "@/shared/device-types";
 import { isDeviceCredential } from "@/main/credential-store";
 import { diagnosticInfo, diagnosticWarn } from "@/main/diagnostic-log";
 import type { DashboardAttentionItem, DashboardAttentionKind, DashboardResponse } from "@/shared/dashboard-types";
+import type { HubContent } from "@/shared/content-types";
 
 const REQUEST_TIMEOUT_MS = 10_000;
 const INVALID_DEVICE_STATUSES = new Set([400, 401, 403, 404, 410, 422]);
@@ -174,4 +175,30 @@ export async function fetchTeacherLyftDashboard(credential: DeviceCredential): P
   }
   if (!response.ok) throw new TeacherLyftApiError("http", `Dashboard returned HTTP ${response.status}`, response.status);
   return parseDashboardResponse(await safeJson(response));
+}
+
+const SECTION_PATHS = {
+  classes: "/api/device/classes",
+  assignments: "/api/device/assignments",
+  progress: "/api/device/student-progress",
+  curriculum: "/api/device/curriculum",
+  drafts: "/api/device/drafts",
+  library: "/api/device/library",
+} as const;
+
+export async function fetchTeacherLyftContent<K extends keyof HubContent>(
+  credential: DeviceCredential,
+  section: K,
+): Promise<HubContent[K]> {
+  const response = await request(SECTION_PATHS[section], {
+    method: "GET",
+    headers: { Authorization: `Bearer ${credential.deviceToken}` },
+  });
+  if (INVALID_DEVICE_STATUSES.has(response.status)) {
+    throw new TeacherLyftApiError("unauthorized", "Device credential is no longer authorized", response.status);
+  }
+  if (!response.ok) throw new TeacherLyftApiError("http", `${section} returned HTTP ${response.status}`, response.status);
+  const value = await safeJson(response);
+  if (!isRecord(value)) throw new TeacherLyftApiError("malformed", `TeacherLyft returned invalid ${section} data`);
+  return value as HubContent[K];
 }
