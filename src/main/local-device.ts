@@ -1,12 +1,25 @@
 import { deleteDeviceCredential, loadDeviceCredential, saveDeviceCredential } from "@/main/credential-store";
-import { fetchTeacherLyftContent, fetchTeacherLyftDashboard, fetchTeacherLyftDetail, pairWithTeacherLyft, TeacherLyftApiError, verifyWithTeacherLyft } from "@/main/teacherlyft-api";
+import { askTeacherLyftApi, fetchTeacherLyftContent, fetchTeacherLyftDashboard, fetchTeacherLyftDetail, pairWithTeacherLyft, TeacherLyftApiError, verifyWithTeacherLyft } from "@/main/teacherlyft-api";
 import type { ContentResult, HubContent } from "@/shared/content-types";
 import type { DetailRequest, DetailResult } from "@/shared/content-types";
 import type { LocalDeviceState } from "@/shared/device-types";
 import type { DashboardResult } from "@/shared/dashboard-types";
 import { diagnosticError, diagnosticInfo, diagnosticWarn } from "@/main/diagnostic-log";
+import type { AssistantRequest, AssistantResult } from "@/shared/assistant-types";
 
 let pairingOperation: Promise<LocalDeviceState> | null = null;
+
+export async function askLocalTeacherLyft(input: AssistantRequest): Promise<AssistantResult> {
+  const credential = await loadDeviceCredential();
+  if (!credential) return { ok: false, error: "unpaired", message: "Pair this Hub before using the assistant." };
+  try { return await askTeacherLyftApi(credential, input); }
+  catch (error) {
+    const kind = error instanceof TeacherLyftApiError ? error.kind : "unexpected";
+    diagnosticWarn("assistant", "request_failed", { kind, status: error instanceof TeacherLyftApiError ? error.status : undefined });
+    const offline = kind === "dns" || kind === "tcp" || kind === "timeout";
+    return { ok: false, error: kind === "unauthorized" ? "unauthorized" : offline ? "offline" : "unavailable", message: offline ? "TeacherLyft Assistant requires an internet connection." : "Couldn't complete that request." };
+  }
+}
 
 export class LocalDeviceError extends Error {
   constructor(readonly kind: "credential_save" | "verification_failed", message: string, options?: ErrorOptions) {

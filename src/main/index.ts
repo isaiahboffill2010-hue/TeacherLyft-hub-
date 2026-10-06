@@ -4,6 +4,7 @@ import { app, BrowserWindow, Menu, session } from "electron";
 import { registerIpcHandlers, removeIpcHandlers } from "@/main/ipc-handlers";
 import { browserWindowOptions, resolvePreloadPath, shouldUseSandbox } from "@/main/window-options";
 import { configureDiagnosticLog, diagnosticError, diagnosticInfo } from "@/main/diagnostic-log";
+import { mayUseMicrophone } from "@/main/permissions";
 
 try { loadEnvFile(join(process.cwd(), ".env.local")); }
 catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
@@ -12,6 +13,8 @@ const development = Boolean(process.env.ELECTRON_RENDERER_URL);
 const sandboxEnabled = shouldUseSandbox();
 if (sandboxEnabled) app.enableSandbox();
 
+let trustedWebContentsId: number | null = null;
+
 async function createWindow(): Promise<BrowserWindow> {
   const window = new BrowserWindow(browserWindowOptions(
     resolvePreloadPath(__dirname),
@@ -19,6 +22,7 @@ async function createWindow(): Promise<BrowserWindow> {
     sandboxEnabled,
   ));
   diagnosticInfo("startup", "browser_window_created");
+  trustedWebContentsId = window.webContents.id;
   Menu.setApplicationMenu(null);
   registerIpcHandlers(window.webContents.id);
 
@@ -69,7 +73,15 @@ app.whenReady().then(async () => {
     waylandConfigured: Boolean(process.env.WAYLAND_DISPLAY),
     sandbox: sandboxEnabled,
   });
-  session.defaultSession.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false));
+  session.defaultSession.setPermissionCheckHandler((webContents, permission, requestingOrigin, details) =>
+    mayUseMicrophone(webContents?.id ?? null, trustedWebContentsId, requestingOrigin, permission, details.mediaType ? [details.mediaType] : [])
+  );
+  session.defaultSession.setPermissionRequestHandler((webContents, permission, callback, details) => {
+    const mediaTypes = permission === "media" && "mediaTypes" in details ? details.mediaTypes ?? [] : [];
+    const allowed = mayUseMicrophone(webContents?.id ?? null, trustedWebContentsId, webContents?.getURL() ?? "", permission, mediaTypes);
+    diagnosticInfo("permissions", allowed ? "microphone_allowed" : "request_denied", { permission, mediaTypes });
+    callback(allowed);
+  });
   await createWindow();
   app.on("activate", () => { if (BrowserWindow.getAllWindows().length === 0) void createWindow(); });
 }).catch((error) => {

@@ -8,10 +8,13 @@ export const IPC_CHANNELS = {
   getDrafts: "teacherlyft:get-drafts",
   getLibrary: "teacherlyft:get-library",
   getDetail: "teacherlyft:get-detail",
+  askTeacherLyft: "teacherlyft:ask-teacherlyft",
   pair: "teacherlyft:pair",
   retryConnection: "teacherlyft:retry-connection",
   localDisconnect: "teacherlyft:local-disconnect",
 } as const;
+
+export { isAssistantRequest } from "@/shared/assistant-types";
 
 export function isValidPairRequest(value: unknown): value is { code: string } {
   return Boolean(value && typeof value === "object" && "code" in value

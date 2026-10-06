@@ -1,8 +1,8 @@
 import type { IpcMainInvokeEvent } from "electron";
 import { ipcMain } from "electron";
-import { disconnectLocalDevice, getLocalContent, getLocalDashboard, getLocalDetail, getLocalDeviceState, LocalDeviceError, pairLocalDevice } from "@/main/local-device";
+import { askLocalTeacherLyft, disconnectLocalDevice, getLocalContent, getLocalDashboard, getLocalDetail, getLocalDeviceState, LocalDeviceError, pairLocalDevice } from "@/main/local-device";
 import { TeacherLyftApiError } from "@/main/teacherlyft-api";
-import { IPC_CHANNELS, isValidDetailRequest, isValidPairRequest } from "@/shared/ipc";
+import { IPC_CHANNELS, isAssistantRequest, isValidDetailRequest, isValidPairRequest } from "@/shared/ipc";
 import type { DeviceActionResult } from "@/shared/device-types";
 import { diagnosticInfo, diagnosticWarn } from "@/main/diagnostic-log";
 
@@ -79,6 +79,12 @@ export function registerIpcHandlers(webContentsId: number): void {
     requireTrustedSender(event, webContentsId);
     if (!isValidDetailRequest(request)) return { ok: false, error: "not_found" } as const;
     return getLocalDetail(request);
+  });
+  ipcMain.handle(IPC_CHANNELS.askTeacherLyft, async (event, request: unknown) => {
+    requireTrustedSender(event, webContentsId);
+    if (!isAssistantRequest(request)) return { ok: false, error: "invalid_audio", message: "That recording could not be used." } as const;
+    diagnosticInfo("ipc", "assistant_invoked", { audioBytes: Math.floor(request.audioBase64.length * 0.75), durationMs: request.durationMs, mimeType: request.mimeType });
+    return askLocalTeacherLyft(request);
   });
   ipcMain.handle(IPC_CHANNELS.retryConnection, async (event) => {
     requireTrustedSender(event, webContentsId);

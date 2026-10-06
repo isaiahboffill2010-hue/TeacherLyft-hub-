@@ -1,6 +1,6 @@
-import { useState } from "react";
 import type { DashboardAttentionKind, DashboardResponse } from "@/shared/dashboard-types";
 import { HubIcon, type IconName } from "@/renderer/components/HubIcon";
+import { VoiceAssistant } from "@/renderer/components/VoiceAssistant";
 
 const statDefinitions: Array<{ key: "classes" | "toGrade" | "students" | "reminders"; label: string; icon: IconName; tone: string }> = [
   { key: "classes", label: "Classes", icon: "classes", tone: "blue" },
@@ -34,7 +34,6 @@ type Props = {
 };
 
 export function HomeDashboard({ dashboard, loading, teacherName, unavailable, dashboardError = false, onRetry, onNavigate }: Props) {
-  const [voiceNotice, setVoiceNotice] = useState(false);
   return <>
     {dashboardError && <div className="dashboard-message" role="status">
       <span>Dashboard data unavailable</span>
@@ -46,12 +45,7 @@ export function HomeDashboard({ dashboard, loading, teacherName, unavailable, da
       <p>Here's what's happening in your classroom today.</p>
     </section>
 
-    <section className="ask-card">
-      <button className="microphone-button" onClick={() => setVoiceNotice(true)} aria-label="Ask TeacherLyft by voice"><HubIcon name="microphone"/></button>
-      <div><p className="section-kicker">Your teaching copilot</p><h2>Ask TeacherLyft</h2><p>Get instant help with lessons, grading, student insights, and more.</p></div>
-      <button className="voice-pill" onClick={() => setVoiceNotice(true)}><span aria-hidden="true" />Tap to start speaking</button>
-      {voiceNotice && <p className="voice-notice" role="status">Voice assistant coming in Phase 3E</p>}
-    </section>
+    <VoiceAssistant offline={unavailable}/>
 
     <section className="stats-grid" aria-label="Classroom statistics" aria-busy={loading}>
       {statDefinitions.map((stat) => <button className="stat-card" key={stat.key} onClick={() => onNavigate?.(stat.key === "classes" ? "classes" : stat.key === "toGrade" ? "assignments" : stat.key === "students" ? "progress" : "more")}>

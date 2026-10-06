@@ -3,6 +3,7 @@ import { isDeviceCredential } from "@/main/credential-store";
 import { diagnosticInfo, diagnosticWarn } from "@/main/diagnostic-log";
 import type { DashboardAttentionItem, DashboardAttentionKind, DashboardResponse } from "@/shared/dashboard-types";
 import type { DetailRequest, HubContent } from "@/shared/content-types";
+import type { AssistantRequest, AssistantResult } from "@/shared/assistant-types";
 
 export const REQUEST_TIMEOUTS = {
   authentication: 10_000,
@@ -10,6 +11,7 @@ export const REQUEST_TIMEOUTS = {
   dashboard: 30_000,
   content: 90_000,
   detail: 120_000,
+  assistant: 150_000,
 } as const;
 const INVALID_DEVICE_STATUSES = new Set([400, 401, 403, 404, 410, 422]);
 type DeviceVerificationResponse = {
@@ -231,4 +233,20 @@ export async function fetchTeacherLyftDetail(credential: DeviceCredential, detai
   const value = await safeJson(response);
   if (!isRecord(value)) throw new TeacherLyftApiError("malformed", "TeacherLyft returned invalid detail data");
   return value;
+}
+
+export async function askTeacherLyftApi(credential: DeviceCredential, input: AssistantRequest): Promise<AssistantResult> {
+  const response = await request("/api/device/assistant", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${credential.deviceToken}`, "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  }, REQUEST_TIMEOUTS.assistant);
+  if (INVALID_DEVICE_STATUSES.has(response.status)) return { ok: false, error: "unauthorized", message: "This Hub is no longer authorized." };
+  if (!response.ok) return { ok: false, error: response.status === 400 || response.status === 413 ? "invalid_audio" : "unavailable", message: "Couldn't complete that request." };
+  const value = await safeJson(response);
+  if (!isRecord(value) || typeof value.transcript !== "string" || !value.transcript || typeof value.answer !== "string" || !value.answer
+      || !(value.audioBase64 === null || typeof value.audioBase64 === "string") || !(value.audioMimeType === null || value.audioMimeType === "audio/wav")) {
+    return { ok: false, error: "unavailable", message: "TeacherLyft returned an invalid assistant response." };
+  }
+  return { ok: true, transcript: value.transcript, answer: value.answer, audioMimeType: value.audioMimeType, audioBase64: value.audioBase64 };
 }

@@ -86,6 +86,7 @@ describe("Electron security boundary", () => {
   it("exposes only the explicitly approved bridge methods", () => {
     const bridge = createTeacherLyftBridge(vi.fn());
     expect(Object.keys(bridge).sort()).toEqual([
+      "askTeacherLyft",
       "getAssignments", "getClasses", "getCurriculum", "getDashboard", "getDetail", "getDeviceState",
       "getDrafts", "getLibrary", "getStudentProgress", "localDisconnect", "pair", "retryConnection",
     ]);
@@ -104,6 +105,7 @@ describe("Electron security boundary", () => {
     await bridge.getDrafts();
     await bridge.getLibrary();
     await bridge.getDetail({ kind: "student", classId: "class-1", id: "student-1" });
+    await bridge.askTeacherLyft({ audioBase64: "YQ==", mimeType: "audio/webm", durationMs: 1000 });
     await bridge.pair({ code: "123456" });
     await bridge.retryConnection();
     await bridge.localDisconnect();
@@ -113,7 +115,7 @@ describe("Electron security boundary", () => {
 
   it("keeps sender validation on every fixed IPC handler", async () => {
     const handlers = await text("src/main/ipc-handlers.ts");
-    for (const channel of ["getDeviceState", "getDashboard", "getDetail", "retryConnection", "localDisconnect", "pair"] as const) {
+    for (const channel of ["getDeviceState", "getDashboard", "getDetail", "askTeacherLyft", "retryConnection", "localDisconnect", "pair"] as const) {
       const start = handlers.indexOf(`IPC_CHANNELS.${channel}`);
       expect(start, `${channel} handler missing`).toBeGreaterThan(-1);
       expect(handlers.slice(start, start + 180)).toContain("requireTrustedSender(event, webContentsId)");
