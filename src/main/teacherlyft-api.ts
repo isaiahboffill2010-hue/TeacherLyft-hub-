@@ -2,7 +2,7 @@ import type { ConnectedDevice, DeviceCredential } from "@/shared/device-types";
 import { isDeviceCredential } from "@/main/credential-store";
 import { diagnosticInfo, diagnosticWarn } from "@/main/diagnostic-log";
 import type { DashboardAttentionItem, DashboardAttentionKind, DashboardResponse } from "@/shared/dashboard-types";
-import type { HubContent } from "@/shared/content-types";
+import type { DetailRequest, HubContent } from "@/shared/content-types";
 
 const REQUEST_TIMEOUT_MS = 10_000;
 const INVALID_DEVICE_STATUSES = new Set([400, 401, 403, 404, 410, 422]);
@@ -201,4 +201,23 @@ export async function fetchTeacherLyftContent<K extends keyof HubContent>(
   const value = await safeJson(response);
   if (!isRecord(value)) throw new TeacherLyftApiError("malformed", `TeacherLyft returned invalid ${section} data`);
   return value as HubContent[K];
+}
+
+export async function fetchTeacherLyftDetail(credential: DeviceCredential, detail: DetailRequest): Promise<Record<string, unknown>> {
+  const id = encodeURIComponent(detail.id);
+  const paths = {
+    class: `/api/device/classes/${id}`,
+    student: `/api/device/classes/${encodeURIComponent(detail.classId ?? "")}/students/${id}`,
+    assignment: `/api/device/assignments/${id}`,
+    curriculum: `/api/device/curriculum/${id}`,
+    draft: `/api/device/drafts/${id}`,
+    library: `/api/device/library/${id}`,
+  } as const;
+  const response = await request(paths[detail.kind], { method: "GET", headers: { Authorization: `Bearer ${credential.deviceToken}` } });
+  if (response.status === 404) throw new TeacherLyftApiError("http", "Detail not found", 404);
+  if (INVALID_DEVICE_STATUSES.has(response.status)) throw new TeacherLyftApiError("unauthorized", "Device credential is no longer authorized", response.status);
+  if (!response.ok) throw new TeacherLyftApiError("http", `Detail returned HTTP ${response.status}`, response.status);
+  const value = await safeJson(response);
+  if (!isRecord(value)) throw new TeacherLyftApiError("malformed", "TeacherLyft returned invalid detail data");
+  return value;
 }

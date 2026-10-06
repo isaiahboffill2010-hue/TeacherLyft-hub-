@@ -1,6 +1,7 @@
 import { deleteDeviceCredential, loadDeviceCredential, saveDeviceCredential } from "@/main/credential-store";
-import { fetchTeacherLyftContent, fetchTeacherLyftDashboard, pairWithTeacherLyft, TeacherLyftApiError, verifyWithTeacherLyft } from "@/main/teacherlyft-api";
+import { fetchTeacherLyftContent, fetchTeacherLyftDashboard, fetchTeacherLyftDetail, pairWithTeacherLyft, TeacherLyftApiError, verifyWithTeacherLyft } from "@/main/teacherlyft-api";
 import type { ContentResult, HubContent } from "@/shared/content-types";
+import type { DetailRequest, DetailResult } from "@/shared/content-types";
 import type { LocalDeviceState } from "@/shared/device-types";
 import type { DashboardResult } from "@/shared/dashboard-types";
 import { diagnosticError, diagnosticInfo, diagnosticWarn } from "@/main/diagnostic-log";
@@ -11,6 +12,19 @@ export class LocalDeviceError extends Error {
   constructor(readonly kind: "credential_save" | "verification_failed", message: string, options?: ErrorOptions) {
     super(message, options);
     this.name = "LocalDeviceError";
+  }
+}
+
+export async function getLocalDetail(detail: DetailRequest): Promise<DetailResult> {
+  const credential = await loadDeviceCredential();
+  if (!credential) return { ok: false, error: "unpaired" };
+  try { return { ok: true, data: await fetchTeacherLyftDetail(credential, detail) }; }
+  catch (error) {
+    const kind = error instanceof TeacherLyftApiError ? error.kind : "unexpected";
+    const status = error instanceof TeacherLyftApiError ? error.status : undefined;
+    diagnosticWarn("detail", "fetch_failed", { detailKind: detail.kind, kind, status });
+    if (status === 404) return { ok: false, error: "not_found" };
+    return { ok: false, error: kind === "unauthorized" ? "unauthorized" : "unavailable" };
   }
 }
 

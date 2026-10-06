@@ -17,3 +17,7 @@ export type HubContent = {
 export type ContentResult<K extends keyof HubContent> =
   | { ok: true; data: HubContent[K] }
   | { ok: false; error: "unavailable" | "unauthorized" | "unpaired" };
+
+export type DetailKind = "class" | "student" | "assignment" | "curriculum" | "draft" | "library";
+export type DetailRequest = { kind: DetailKind; id: string; classId?: string };
+export type DetailResult = { ok: true; data: Record<string, unknown> } | { ok: false; error: "unavailable" | "unauthorized" | "unpaired" | "not_found" };

@@ -7,6 +7,7 @@ export const IPC_CHANNELS = {
   getCurriculum: "teacherlyft:get-curriculum",
   getDrafts: "teacherlyft:get-drafts",
   getLibrary: "teacherlyft:get-library",
+  getDetail: "teacherlyft:get-detail",
   pair: "teacherlyft:pair",
   retryConnection: "teacherlyft:retry-connection",
   localDisconnect: "teacherlyft:local-disconnect",
@@ -15,4 +16,12 @@ export const IPC_CHANNELS = {
 export function isValidPairRequest(value: unknown): value is { code: string } {
   return Boolean(value && typeof value === "object" && "code" in value
     && typeof value.code === "string" && /^\d{6}$/.test(value.code));
+}
+
+export function isValidDetailRequest(value: unknown): value is import("@/shared/content-types").DetailRequest {
+  if (!value || typeof value !== "object") return false;
+  const item = value as Record<string, unknown>;
+  const kinds = new Set(["class", "student", "assignment", "curriculum", "draft", "library"]);
+  return typeof item.kind === "string" && kinds.has(item.kind) && typeof item.id === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(item.id)
+    && (item.kind !== "student" || typeof item.classId === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(item.classId));
 }

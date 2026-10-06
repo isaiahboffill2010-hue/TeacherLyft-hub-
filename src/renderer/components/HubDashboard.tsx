@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
 import type { DashboardResponse } from "@/shared/dashboard-types";
-import type { HubContent } from "@/shared/content-types";
+import type { DetailKind, DetailRequest, HubContent } from "@/shared/content-types";
 import { BottomNav, type HubTab } from "@/renderer/components/BottomNav";
 import { HomeDashboard } from "@/renderer/components/HomeDashboard";
 import { AssignmentsPage, ClassesPage, CurriculumPage, DraftsPage, LibraryPage, MorePage, ProgressPage, SettingsPage, type MoreSection } from "@/renderer/components/ContentPages";
 import { TopBar } from "@/renderer/components/TopBar";
+import { DetailPage } from "@/renderer/components/DetailPage";
 
 type Props = { connection: "connected" | "offline"; teacherName: string | null; retrying: boolean; onRetry: () => void };
 type Section = HubTab | MoreSection;
@@ -19,6 +20,13 @@ export function HubDashboard({ connection, teacherName, retrying, onRetry }: Pro
   const [content, setContent] = useState<ContentState>({});
   const [loading, setLoading] = useState<Section | null>(null);
   const [errors, setErrors] = useState<Partial<Record<Section, boolean>>>({});
+  const [detail, setDetail] = useState<{ request: DetailRequest; data: Record<string, unknown> | null; loading: boolean; error: boolean } | null>(null);
+
+  const openDetail = useCallback(async (request: DetailRequest) => {
+    setDetail({ request, data: null, loading: true, error: false });
+    try { const result = await window.teacherlyft?.getDetail(request); setDetail(result?.ok ? { request, data: result.data, loading: false, error: false } : { request, data: null, loading: false, error: true }); }
+    catch { setDetail({ request, data: null, loading: false, error: true }); }
+  }, []);
 
   const refreshDashboard = useCallback(async () => {
     if (!window.teacherlyft || connection !== "connected") return;
@@ -54,15 +62,16 @@ export function HubDashboard({ connection, teacherName, retrying, onRetry }: Pro
   const key = activeSection in dataKeyFor ? dataKeyFor[activeSection as keyof typeof dataKeyFor] : null;
   const error = Boolean(errors[activeSection]) || Boolean(connection === "offline" && key && !content[key]);
   const page = activeSection === "home" ? <HomeDashboard dashboard={dashboard} loading={loading === "home" && !dashboard} teacherName={dashboard?.teacherName || teacherName || "Teacher"} unavailable={!dashboard && connection === "offline"} dashboardError={Boolean(errors.home)} onRetry={() => void refreshDashboard()} onNavigate={selectPrimary}/>
-    : activeSection === "classes" ? <ClassesPage items={content.classes?.classes ?? []} loading={busy} error={error}/>
-    : activeSection === "assignments" ? <AssignmentsPage items={content.assignments?.assignments ?? []} loading={busy} error={error}/>
-    : activeSection === "progress" ? <ProgressPage classes={content.progress?.classes ?? []} loading={busy} error={error}/>
+    : activeSection === "classes" ? <ClassesPage items={content.classes?.classes ?? []} loading={busy} error={error} onOpenClass={(id)=>void openDetail({kind:"class",id})} onOpenStudent={(classId,id)=>void openDetail({kind:"student",classId,id})}/>
+    : activeSection === "assignments" ? <AssignmentsPage items={content.assignments?.assignments ?? []} loading={busy} error={error} onOpen={(id)=>void openDetail({kind:"assignment",id})}/>
+    : activeSection === "progress" ? <ProgressPage classes={content.progress?.classes ?? []} loading={busy} error={error} onOpenClass={(id)=>void openDetail({kind:"class",id})}/>
     : activeSection === "more" ? <MorePage onOpen={setActiveSection}/>
-    : activeSection === "curriculum" ? <CurriculumPage items={content.curriculum?.textbooks ?? []} loading={busy} error={error} unavailable={content.curriculum?.available === false}/>
-    : activeSection === "drafts" ? <DraftsPage items={content.drafts?.drafts ?? []} loading={busy} error={error}/>
-    : activeSection === "library" ? <LibraryPage items={content.library?.concepts ?? []} loading={busy} error={error}/>
+    : activeSection === "curriculum" ? <CurriculumPage items={content.curriculum?.textbooks ?? []} loading={busy} error={error} unavailable={content.curriculum?.available === false} onOpen={(id)=>void openDetail({kind:"curriculum",id})}/>
+    : activeSection === "drafts" ? <DraftsPage items={content.drafts?.drafts ?? []} loading={busy} error={error} onOpen={(id)=>void openDetail({kind:"draft",id})}/>
+    : activeSection === "library" ? <LibraryPage items={content.library?.concepts ?? []} loading={busy} error={error} onOpen={(id)=>void openDetail({kind:"library",id})}/>
     : <SettingsPage connection={connection} onDisconnect={() => void window.teacherlyft?.localDisconnect().then(() => window.location.reload())}/>;
 
   const activeTab: HubTab = activeSection === "curriculum" || activeSection === "drafts" || activeSection === "library" || activeSection === "settings" ? "more" : activeSection;
-  return <div className="hub-shell"><TopBar connection={connection} onRetry={onRetry} retrying={retrying} onRefresh={refresh} refreshing={busy}/><main className="hub-content">{activeSection !== "more" && activeTab === "more" && <button className="back-to-more" onClick={() => setActiveSection("more")}>‹ More</button>}{page}</main><BottomNav active={activeTab} onChange={selectPrimary}/></div>;
+  const visible = detail ? <DetailPage kind={detail.request.kind as DetailKind} data={detail.data} loading={detail.loading} error={detail.error} onBack={()=>setDetail(null)} onOpenStudent={(classId,id)=>void openDetail({kind:"student",classId,id})}/> : page;
+  return <div className="hub-shell"><TopBar connection={connection} onRetry={onRetry} retrying={retrying} onRefresh={refresh} refreshing={busy}/><main className="hub-content">{!detail&&activeSection !== "more" && activeTab === "more" && <button className="back-to-more" onClick={() => setActiveSection("more")}>‹ More</button>}{visible}</main><BottomNav active={activeTab} onChange={(tab)=>{setDetail(null);selectPrimary(tab)}}/></div>;
 }

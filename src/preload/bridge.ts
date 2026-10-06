@@ -1,5 +1,6 @@
 import { IPC_CHANNELS } from "@/shared/ipc";
 import type { PairRequest, TeacherLyftBridge } from "@/shared/device-types";
+import type { DetailRequest } from "@/shared/content-types";
 
 type Invoke = (channel: string, ...args: unknown[]) => Promise<unknown>;
 
@@ -13,6 +14,7 @@ export function createTeacherLyftBridge(invoke: Invoke): TeacherLyftBridge {
     getCurriculum: () => invoke(IPC_CHANNELS.getCurriculum) as ReturnType<TeacherLyftBridge["getCurriculum"]>,
     getDrafts: () => invoke(IPC_CHANNELS.getDrafts) as ReturnType<TeacherLyftBridge["getDrafts"]>,
     getLibrary: () => invoke(IPC_CHANNELS.getLibrary) as ReturnType<TeacherLyftBridge["getLibrary"]>,
+    getDetail: (request: DetailRequest) => invoke(IPC_CHANNELS.getDetail, { kind: request.kind, id: request.id, ...(request.classId ? { classId: request.classId } : {}) }) as ReturnType<TeacherLyftBridge["getDetail"]>,
     pair: (request: PairRequest) => invoke(IPC_CHANNELS.pair, { code: request.code }) as ReturnType<TeacherLyftBridge["pair"]>,
     retryConnection: () => invoke(IPC_CHANNELS.retryConnection) as ReturnType<TeacherLyftBridge["retryConnection"]>,
     localDisconnect: () => invoke(IPC_CHANNELS.localDisconnect) as ReturnType<TeacherLyftBridge["localDisconnect"]>,

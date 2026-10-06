@@ -38,15 +38,15 @@ describe("TeacherLyft page structure in the Hub shell", () => {
 
   it("matches the Student Progress overview hierarchy", () => {
     const html = renderToStaticMarkup(createElement(ProgressPage, { loading: false, error: false, classes: [{ id: "c1", class_name: "Math", student_count: 20, avg_grade: 82, assignments_given: 3, graded_count: 8, awaiting_grade_count: 1, missing_count: 2, on_track_count: 14, needs_attention_count: 3, at_risk_count: 1, no_evidence_count: 0, completion_rate: 90, students: [{ id: "s1", name: "Jordan" }] }] }));
-    expectOrdered(html, ["Student Progress", "Performance, completion and follow-up", "Students", "Needing Attention", "Missing Work", "Recent Performance", "Classes", "Math", "Class average", "Turned in", "3 assignments", "2 missing", "4 need attention"]);
+    expectOrdered(html, ["Student Progress", "Performance, completion and follow-up", "Students", "Needing Attention", "Missing Work", "Recent Performance", "Classes", "Math", "Class average", "Turned in", "3 assignments", "2 missing", "1 awaiting grading", "View class progress"]);
     expect(html).toContain('aria-label="Across all classes"');
   });
 
   it("matches Curriculum, Drafts, and Solution Library organization", () => {
     const curriculum = renderToStaticMarkup(createElement(CurriculumPage, { loading: false, error: false, items: [{ id: "t1", title: "Algebra", publisher: "Open Press", subject: "Math", courseLevel: "Grade 8", status: "ready", pageCount: 100, processedPages: 100, totalPages: 100, structureStatus: "ready" }] }));
-    expectOrdered(curriculum, ["My Curriculum", "Upload and organize", "Add Textbook", "Algebra", "Math", "Ready", "Pages", "Processed", "Structure", "Open on web", "Delete on web"]);
+    expectOrdered(curriculum, ["My Curriculum", "Upload and organize", "Add Textbook", "Algebra", "Math", "ready", "Pages", "Processed", "Structure", "View details", "Organise on web", "Delete on web"]);
     const drafts = renderToStaticMarkup(createElement(DraftsPage, { loading: false, error: false, items: [{ id: "d1", classId: "c1", className: "Math", title: "Fractions", dueDate: null, maxPoints: 20, updatedAt: null, status: "DRAFT" }] }));
-    expectOrdered(drafts, ["Drafts", "have no answer key yet", "1 to set up", "Fractions", "Math", "no due date", "20 points", "Not published in Classroom", "Classroom", "Set up"]);
+    expectOrdered(drafts, ["Drafts", "have no answer key yet", "1 to set up", "Fractions", "Math", "no due date", "20 points", "View details", "Set up on web"]);
     const library = renderToStaticMarkup(createElement(LibraryPage, { loading: false, error: false, items: [{ id: "l1", subject: "Math", concept_name: "Fractions", description: "Equivalent fractions", solution_summaries: { teaching_method: "Visual models" } }] }));
     expectOrdered(library, ["Teacher Resource Library", "Solution Library", "Method Match", "New Concept", "Math", "Fractions", "Equivalent fractions", "Summary Ready", "Resources", "Upload on web"]);
   });

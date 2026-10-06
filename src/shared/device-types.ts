@@ -38,6 +38,7 @@ export interface TeacherLyftBridge {
   getCurriculum(): Promise<import("@/shared/content-types").ContentResult<"curriculum">>;
   getDrafts(): Promise<import("@/shared/content-types").ContentResult<"drafts">>;
   getLibrary(): Promise<import("@/shared/content-types").ContentResult<"library">>;
+  getDetail(request: import("@/shared/content-types").DetailRequest): Promise<import("@/shared/content-types").DetailResult>;
   pair(request: PairRequest): Promise<DeviceActionResult>;
   retryConnection(): Promise<LocalDeviceState>;
   localDisconnect(): Promise<LocalDeviceState>;
